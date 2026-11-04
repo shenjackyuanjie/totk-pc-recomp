@@ -1,4 +1,4 @@
-// 独立手柄面板：窗口线程只读取 input_overlay_state，不进入游戏输入合并路径。
+// Standalone gamepad panel: its window thread reads input_overlay_state, never the game's merged input path.
 #include "input_panel.h"
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -19,7 +19,7 @@ static PlatMutex owner_lock = PLAT_MUTEX_INIT;
 static int stopping;
 static int suppressed;
 static const char *owner_title;
-// 以下缓存仅由窗口线程使用；创建前或 join 后才由 owner 清零。
+// Only the window thread uses these caches; the owner resets them before creation or after join.
 static InputOverlayState previous;
 static int previous_w, previous_h, valid;
 static const char *previous_title;
@@ -103,7 +103,7 @@ static void draw(void *user, void *dc, int w, int h) {
         snprintf(buf,sizeof buf,"%d",s.trigger[i]); label(&c,x-22,145,70,20,buf,1);
     }
     button(&c,&s,B_MINUS,"-",245,50,45,25,0); button(&c,&s,B_PLUS,"+",330,50,45,25,0);
-    // 示意图显示映射后的逻辑动作，不把硬件标签或自定义绑定当成动作名。
+    // The diagram shows mapped logical actions, not hardware labels or custom binding names.
     int xbox = s.layout == PAD_LAYOUT_XBOX;
     button(&c,&s,xbox ? B_A : B_B,xbox ? "A" : "B",475,158,38,38,1);
     button(&c,&s,xbox ? B_B : B_A,xbox ? "B" : "A",516,117,38,38,1);
@@ -153,7 +153,7 @@ void input_panel_tick(void) {
         owner_title = menu_text(UI_INPUT_TITLE);
         window = uiwindow_open(owner_title,460,380,60,draw,NULL);
         if (!window) {
-            suppressed = 1; // 创建失败不逐帧重试；关闭再开启配置后重试
+            suppressed = 1; // Do not retry a failed creation every frame; rearm after the setting is switched off and on.
             rt_log("input panel: cannot create window; toggle input_window off/on to retry");
         }
     }

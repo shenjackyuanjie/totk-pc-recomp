@@ -645,7 +645,7 @@ int input_overlay_state(InputOverlayState *s) {
                                                SDL_GAMEPAD_AXIS_RIGHTX, SDL_GAMEPAD_AXIS_RIGHTY};
         for (int i = 0; i < 4; i++) {
             int32_t v = SDL_GetGamepadAxis(pad, axes[i]);
-            s->raw[i] = i & 1 ? -v : v;  // 必须在 int32_t 中反转，保留 +32768 边界
+            s->raw[i] = i & 1 ? -v : v;  // Invert in int32_t to preserve the +32768 endpoint.
         }
         for (int i = 0; i < 2; i++) {
             float dead = stick_dead_get(i);
@@ -656,7 +656,7 @@ int input_overlay_state(InputOverlayState *s) {
         }
         s->motion_available = SDL_GamepadHasSensor(pad, SDL_SENSOR_GYRO) && SDL_GamepadHasSensor(pad, SDL_SENSOR_ACCEL);
         s->motion_enabled = cfg_bool("TOTK_MOTION");
-        // 只读已启用的真传感器，不启动线程，不以 fusion 的静止兜底值冒充测量。
+        // Read enabled physical sensors only; do not start a thread or report the fusion's at-rest fallback as a measurement.
         if (s->motion_available && s->motion_enabled && sensor_ok && sensor_pad == SDL_GetGamepadID(pad)) {
             float g[3];
             if (SDL_GetGamepadSensorData(pad, SDL_SENSOR_GYRO, g, 3)) {

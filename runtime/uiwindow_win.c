@@ -87,7 +87,7 @@ static void font_update(UiWindow *w, UINT dpi) {
     w->font = font; w->dpi = dpi;
 }
 
-// 自行处理非客户区拖动与缩放，避免进入 DefWindowProc 可能激活窗口的模态循环。
+// Handle non-client dragging and sizing directly to avoid DefWindowProc's potentially activating modal loop.
 static void drag_move(UiWindow *w, HWND hwnd) {
     POINT p; GetCursorPos(&p);
     int dx = p.x - w->drag_start.x, dy = p.y - w->drag_start.y;

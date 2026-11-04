@@ -1,4 +1,4 @@
-// 使用真实面板、GDI、文案和窗口；配置、指标及平台锁为测试替身，不读取游戏或用户 ini。
+// Use the real panel, GDI, catalog and window; settings, metrics and platform locks are test doubles, with no game or user ini reads.
 #include <windows.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -84,7 +84,7 @@ int main(int argc, char **argv) {
     for(int i=0;i<50;i++) perf_panel_tick();
     CHECK(!panel() && !perf_panel_active() && cfg_bool("TOTK_PERF_WINDOW"),"environment override does not reopen after close");
     environment=0; perf_panel_tick(); setting=1; perf_panel_tick(); pump(40); CHECK(panel()!=NULL,"effective off rearms the panel");
-    // 并发语言回退覆盖原先共享 base[] 缓冲区的竞态。
+    // Concurrent language fallback exercises the former shared base[] buffer race.
     __atomic_store_n(&language,"ru-RU",__ATOMIC_RELEASE); __atomic_add_fetch(&version,1,__ATOMIC_RELEASE);
     HANDLE readers[8]; for(int i=0;i<8;i++) readers[i]=CreateThread(NULL,0,language_reader,NULL,0,NULL);
     WaitForMultipleObjects(8,readers,TRUE,INFINITE); for(int i=0;i<8;i++) CloseHandle(readers[i]);

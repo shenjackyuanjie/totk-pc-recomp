@@ -3,7 +3,7 @@
 extern "C" {
 #endif
 
-// tick 由 present 路径调用；内部串行化。退出时 close 等待绘图线程退出，永久阻止再次打开。
+// The present path calls tick; operations are internally serialized. At shutdown, close joins drawing and permanently prevents reopening.
 void input_panel_tick(void);
 void input_panel_close(void);
 #ifdef __cplusplus

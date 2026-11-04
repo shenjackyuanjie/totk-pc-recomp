@@ -1,5 +1,5 @@
 #include <stddef.h>
-// 空实现不依赖客体 CPU/SIMD 头文件。
+// The stub does not depend on guest CPU/SIMD headers.
 void rt_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 #include "uiwindow.h"
 

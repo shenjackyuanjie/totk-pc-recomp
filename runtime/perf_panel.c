@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "cfg.h"
-// 这些宿主声明不依赖客体 CPU/SIMD 实现。
+// These host declarations do not depend on the guest CPU/SIMD implementation.
 void rt_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 extern const int rt_game_version;
 extern const char rt_port_version[];
@@ -105,7 +105,7 @@ void perf_panel_tick(void) {
     int enabled = cfg_bool("TOTK_PERF_WINDOW");
     if (!enabled) suppressed = 0;
     if (window && (!enabled || !uiwindow_is_open(window))) {
-        if (enabled) suppressed = 1;   // 线程意外退出后同样等待显式关闭再开启
+        if (enabled) suppressed = 1;   // An unexpected thread exit also requires an explicit off/on to retry.
         uiwindow_close(window); window = NULL;
         __atomic_store_n(&active, 0, __ATOMIC_RELEASE);
     }

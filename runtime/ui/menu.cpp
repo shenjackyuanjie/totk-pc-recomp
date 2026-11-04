@@ -1229,8 +1229,8 @@ static int g_save_pending;   // a changed setting still waits for its write to t
 // (menu.mm): the machine's load and temperatures, the frame rate and frame times with a graph, the render thread's waits.
 // Off, it costs a cfg_version load per present.
 static unsigned g_perf_ver = ~0u;
-static int g_perf_mode;                  // 仅控制游戏内展示：0 off、1 fps、2 full
-static int g_perf_sampling;              // 独立窗口抬升采样，不改变游戏内展示
+static int g_perf_mode;                  // In-game display only: 0 off, 1 fps, 2 full
+static int g_perf_sampling;              // The separate window raises sampling without changing the in-game display
 static std::atomic<int> g_perf_save;     // F10 changed the mode: totk.ini is written on the present thread
 static uint64_t g_perf_last_ns, g_perf_win_ns, g_perf_max_ns;
 static int g_perf_frames;

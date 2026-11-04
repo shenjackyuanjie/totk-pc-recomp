@@ -1,4 +1,4 @@
-// 验证真实平台语言缓存的首次并发初始化，不调用 SDL 或读取游戏数据。
+// Test concurrent first initialization of the real platform language cache without SDL or game data.
 #include <stdio.h>
 #include <string.h>
 #include "platform/platform.h"

@@ -1,4 +1,4 @@
-// 非 Windows 回归：配置即使启用，两面板也安全回退，不申请窗口、不抬升采样。
+// Non-Windows regression: even when enabled, both panels safely fall back without creating windows or raising sampling.
 #include <stdio.h>
 #include "cfg.h"
 #include "input_panel.h"

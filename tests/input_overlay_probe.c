@@ -1,4 +1,4 @@
-// 无游戏数据回归测试；直接包含 input.c，以断言脚本和录制状态完全未被触碰。
+// Game-data-free regression test; include input.c to verify that script and recording state remain untouched.
 #include <assert.h>
 #include <stdarg.h>
 #include "../runtime/input.c"
@@ -9,7 +9,7 @@ void rt_log(const char *fmt, ...) {
 void rt_fatal(const char *fmt, ...) {
     va_list ap; va_start(ap,fmt); vfprintf(stderr,fmt,ap); va_end(ap); abort();
 }
-// 这些路径若被快照意外调用，测试立即失败而不是掩盖副作用。
+// Fail immediately if the snapshot reaches these paths instead of hiding their side effects.
 int ikb_foreground(void) { abort(); }
 int ikb_down(int key) { (void)key; abort(); }
 int ikb_escape(void) { abort(); }
@@ -27,7 +27,7 @@ uint64_t kern_now_ns(void) { abort(); }
 GfxStats gfx_counters;
 void ikb_cursor_update(void) {}
 void ikb_menu_closed(void) {}
-#define CHECK(c) do { if (!(c)) { fprintf(stderr,"失败 %s:%d: %s\n",__FILE__,__LINE__,#c); exit(1); } } while (0)
+#define CHECK(c) do { if (!(c)) { fprintf(stderr,"FAIL %s:%d: %s\n",__FILE__,__LINE__,#c); exit(1); } } while (0)
 
 static SDL_JoystickID attach(SDL_Joystick **joy) {
     SDL_VirtualJoystickDesc d;
@@ -53,7 +53,7 @@ static void worker(void *arg) {
     }
 }
 int main(void) {
-    // 禁止物理设备后端，仅创建本测试自己的 SDL 虚拟手柄。
+    // Disable physical device backends and create only this test's SDL virtual gamepad.
     SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI,"0");
     SDL_SetHint(SDL_HINT_JOYSTICK_RAWINPUT,"0");
     SDL_SetHint(SDL_HINT_JOYSTICK_DIRECTINPUT,"0");
@@ -79,7 +79,7 @@ int main(void) {
     int label_south = s.labels[0];
     cfg_set("TOTK_PAD_LAYOUT","xbox");
     sample(&s); CHECK(s.layout == PAD_LAYOUT_XBOX && s.buttons == (1ull << B_A));
-    CHECK(s.labels[0] == label_south); // layout 不会改写硬件标签
+    CHECK(s.labels[0] == label_south); // Changing the layout does not rewrite hardware labels.
     cfg_set("TOTK_BIND_A","pad:west");
     cfg_set("TOTK_BIND_Y","pad:south");
     sample(&s); CHECK(s.buttons == (1ull << B_Y));
@@ -120,7 +120,7 @@ int main(void) {
     CHECK(SDL_SetJoystickVirtualAxis(joy,SDL_GAMEPAD_AXIS_RIGHT_TRIGGER,32767));
     sample(&s); CHECK(s.trigger[0] > 0 && s.trigger[0] < 16384 && s.trigger[1] == 32767);
     CHECK(!(s.buttons & (1ull << B_ZL)) && (s.buttons & (1ull << B_ZR)));
-    // overlay 不参与菜单屏蔽或组合键消费；同时按下的状态完整可见。
+    // The overlay neither applies menu blocking nor consumes chords; simultaneous presses remain visible.
     input_menu(1); input_block(1);
     CHECK(SDL_SetJoystickVirtualButton(joy,SDL_GAMEPAD_BUTTON_BACK,true));
     CHECK(SDL_SetJoystickVirtualButton(joy,SDL_GAMEPAD_BUTTON_START,true));
@@ -144,6 +144,6 @@ int main(void) {
     plat_mutex_unlock(&lock);
     SDL_CloseJoystick(joy); CHECK(SDL_DetachVirtualJoystick(id));
     SDL_Quit();
-    puts("通过：映射/位号/标签/死区/Y边界/扳机/未知陀螺/菜单独立/双线程/无脚本录制副作用/热插拔");
+    puts("PASS: mappings, button bits, labels, dead zones, Y endpoints, triggers, unknown gyro, menu independence, two threads, no script/recording side effects, hotplug");
     return 0;
 }

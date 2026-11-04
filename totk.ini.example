@@ -134,9 +134,9 @@
 # Performance overlay in the top right corner: off, fps, or full (frame rate, mean and longest frame time). F10
 # cycles the modes in game, as do both stick clicks (L3 + R3) on a controller.
 # perf_overlay = off
-# 独立、不抢焦点的性能窗口（Windows）；完整采样会启用现有 GPU 时间戳查询。
+# Separate, non-activating performance window (Windows); full sampling enables the existing GPU timestamp queries.
 # perf_window = 0
-# 独立手柄输入窗口（Windows）；不接管键鼠，也不抢游戏焦点。
+# Separate controller input window (Windows); does not consume keyboard/mouse input or take game focus.
 # input_window = 0
 # Which GPU to use: its index in the log, or part of its name. Default: the first discrete GPU with Vulkan 1.3.
 # gpu_index = 0

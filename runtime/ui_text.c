@@ -5,7 +5,7 @@
 #include <string.h>
 
 #include "cfg.h"
-// 文案只需语言读口，不依赖 ov.h 引入的图形与客体 SIMD 实现。
+// The catalog needs only the language accessor, not the graphics and guest SIMD dependencies of ov.h.
 const char *ov_language(void);
 #include "platform/platform.h"
 #include "ui_text.h"
@@ -2122,7 +2122,7 @@ static const char *resolve_menu_lang(void) {
     const char *sys = plat_ui_language();
     const char *lang = v && *v ? ui_text_lang(v) : sys && *sys ? ui_text_lang(sys) : "en";
     if (ui_text_defined(lang, UI_MENU_TITLE)) return lang;
-    char base[16];   // 独立窗口可并发解析语言
+    char base[16];   // Independent windows may resolve the language concurrently.
     size_t n = strcspn(lang, "-");
     if (n < sizeof base && lang[n]) {
         memcpy(base, lang, n), base[n] = 0;
@@ -2132,7 +2132,7 @@ static const char *resolve_menu_lang(void) {
 }
 
 const char *menu_text(UiTextId id) {
-    // 每个绘制线程缓存自己的版本与语言，避免两个独立原子量发布出混合状态。
+    // Each drawing thread caches its own version and language, avoiding mixed publication through two independent atomics.
     static _Thread_local const char *lang = "en";
     static _Thread_local unsigned seen = ~0u;
     unsigned v = cfg_version();

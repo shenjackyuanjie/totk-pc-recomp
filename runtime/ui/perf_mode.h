@@ -1,7 +1,7 @@
 #pragma once
 #include <string.h>
 
-// 展示与采样独立：off + 独立窗口不会在游戏内绘制浮层。
+// Display and sampling are independent: off plus a separate window does not draw an in-game overlay.
 static inline int perf_display_mode(const char *value) {
     return value && !strcmp(value, "full") ? 2 : value && !strcmp(value, "fps") ? 1 : 0;
 }

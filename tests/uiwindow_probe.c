@@ -1,4 +1,4 @@
-// 独立 Win32 生命周期与焦点探针，不依赖游戏、Vulkan、SDL 或用户设置。
+// Standalone Win32 lifecycle and focus probe without the game, Vulkan, SDL or user settings.
 // clang -O2 -Wall -Wextra -Werror -D_WIN32_WINNT=0x0A00 -I runtime tests/uiwindow_probe.c runtime/uiwindow_win.c -luser32 -lgdi32 -o uiwindow_probe.exe
 #include <windows.h>
 #include <stdio.h>
@@ -43,7 +43,7 @@ int main(void) {
     CHECK(GetForegroundWindow()==focus,"surrogate foreground established");
     CHECK(!uiwindow_open("invalid",0,100,30,draw,NULL),"invalid open returns NULL");
     ProbeDrawState a={0},b={0};
-    // 先预热进程窗口类及系统 GDI/字体缓存，再统计资源。
+    // Warm up the process window class and system GDI/font caches before counting resources.
     UiWindow *warm=uiwindow_open("warm",300,230,30,draw,&a); pump(80); uiwindow_close(warm); pump(30);
     DWORD gdi_before=GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS), handles_before=0;
     GetProcessHandleCount(GetCurrentProcess(),&handles_before);

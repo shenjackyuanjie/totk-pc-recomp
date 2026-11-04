@@ -1,4 +1,4 @@
-// 无游戏数据的 GDI/窗口回归：真实文案表与 uiwindow，只有手柄快照和保存操作使用测试替身。
+// Game-data-free GDI/window regression: real catalog and uiwindow; only the gamepad snapshot and save operation use test doubles.
 #include "../runtime/uiwindow.h"
 static UiWindow *panel_test_open(const char *title,int w,int h,int hz,UiWindowDrawFn draw,void *user);
 #define uiwindow_open panel_test_open
@@ -8,7 +8,7 @@ static UiWindow *panel_test_open(const char *title,int w,int h,int hz,UiWindowDr
 #undef uiwindow_open
 #include <stdarg.h>
 
-#define CHECK(c) do { if (!(c)) { fprintf(stderr,"失败 %s:%d: %s\n",__FILE__,__LINE__,#c); exit(1); } } while (0)
+#define CHECK(c) do { if (!(c)) { fprintf(stderr,"FAIL %s:%d: %s\n",__FILE__,__LINE__,#c); exit(1); } } while (0)
 static InputOverlayState fixture;
 static PlatMutex fixture_lock = PLAT_MUTEX_INIT;
 static int saves, fail_open, open_calls;
@@ -67,9 +67,9 @@ int main(int argc,char **argv) {
     draw(NULL,dc,619,500); CHECK(GetPixel(dc,0,0) == background);
     fixture.layout = PAD_LAYOUT_XBOX; draw(NULL,dc,620,500);
     Canvas c = {dc,.95,15.5,12.5};
-    CHECK(GetPixel(dc,px(&c,494),py(&c,166)) == active); // Xbox A 在南
+    CHECK(GetPixel(dc,px(&c,494),py(&c,166)) == active); // Xbox A is south.
     fixture.layout = PAD_LAYOUT_NINTENDO; draw(NULL,dc,620,500);
-    CHECK(GetPixel(dc,px(&c,535),py(&c,125)) == active); // Nintendo A 在东
+    CHECK(GetPixel(dc,px(&c,535),py(&c,125)) == active); // Nintendo A is east.
     CHECK(GetPixel(dc,px(&c,494),py(&c,166)) == idle);
     DWORD before = GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS);
     for (int i=0;i<300;i++) { fixture.raw[0] = i; draw(NULL,dc,620,500); }
@@ -79,7 +79,7 @@ int main(int argc,char **argv) {
     fixture.connected = 0; draw(NULL,dc,620,500); CHECK(!previous.connected);
     SelectObject(dc,original); DeleteObject(bmp); DeleteDC(dc);
     valid = 0;
-    // 下列测试启动真实原生小窗，但不启动游戏、不写任何 ini。
+    // The following tests open real native panels without starting the game or writing any ini file.
     fixture.connected = 1;
     cfg_set("TOTK_INPUT_WINDOW","1");
     fail_open = 1;
@@ -107,7 +107,7 @@ int main(int argc,char **argv) {
     cfg_set("TOTK_INPUT_WINDOW","0"); input_panel_tick(); CHECK(!window);
     cfg_set("TOTK_INPUT_WINDOW","1"); input_panel_tick(); CHECK(window);
     hwnd = find_window();
-    SendMessageW(hwnd,WM_APP+21,0,0); // 显式内部关闭，不产生用户关闭通知，模拟意外窗口结束
+    SendMessageW(hwnd,WM_APP+21,0,0); // Programmatic internal close without a user notification simulates an unexpected window exit.
     input_panel_tick(); CHECK(!window);
     int stopped_calls = open_calls; input_panel_tick(); CHECK(open_calls == stopped_calls);
     cfg_set("TOTK_INPUT_WINDOW","0"); input_panel_tick();
@@ -125,7 +125,7 @@ int main(int argc,char **argv) {
     HWND final_foreground = GetForegroundWindow();
     wchar_t final_class[128] = {0}; GetClassNameW(final_foreground,final_class,128);
     CHECK(wcscmp(final_class,L"TotkAuxiliaryPanel") != 0);
-    if (final_foreground != foreground) fprintf(stderr,"提示：测试期间前台窗口被其他桌面活动改变，初始面板创建前后焦点一致。\n");
-    puts("通过：GDI布局/按钮方位/脏跳绘/语言重绘/尺寸重绘/300帧资源计数/真实窗口无激活/四语言标题/关闭保存替身/开关/并发退出");
+    if (final_foreground != foreground) fprintf(stderr,"NOTE: Other desktop activity changed the foreground during the test; initial panel creation preserved focus.\n");
+    puts("PASS: GDI layout, button positions, dirty skipping, language/size redraw, 300-frame resource counts, native no-activation, four-language titles, close/save double, toggles, concurrent exit");
     return 0;
 }

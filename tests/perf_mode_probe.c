@@ -1,4 +1,4 @@
-// 不依赖游戏或渲染器，直接验证 present 路径使用的纯策略函数。
+// Test the pure policy functions used by the present path without the game or renderer.
 #include <stdio.h>
 #include "ui/perf_mode.h"
 int main(void) {

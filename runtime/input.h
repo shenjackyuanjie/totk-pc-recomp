@@ -31,18 +31,18 @@ enum { PAD_LABEL_NONE, PAD_LABEL_A, PAD_LABEL_B, PAD_LABEL_X, PAD_LABEL_Y, PAD_L
        PAD_LABEL_SQUARE, PAD_LABEL_TRIANGLE };
 int input_pad_label(int pad);
 
-// 一次持有 input 锁的独立快照；不消费键鼠、脚本、录制或菜单组合键。
-// buttons 是绑定后的 Switch B_* 动作，labels 是实体南/东/西/北键的 SDL 标记，两者含义不同。
+// Independent snapshot under one input lock; does not consume keyboard/mouse input, scripts, recordings or menu chords.
+// buttons holds mapped Switch B_* actions; labels holds SDL labels for the physical south/east/west/north buttons.
 typedef struct {
     int connected, layout;
     int32_t labels[4];
     uint64_t buttons;
-    int32_t raw[4];          // lx, ly, rx, ry；上为 +y；反转 SDL -32768 后允许 +32768
-    int32_t out[4];          // 仅手柄经径向死区后的分量，-32767..32767；不含键鼠或脚本
-    int32_t deadzone[2];     // 百分比
-    int32_t trigger[2];      // 实体 ZL/ZR 模拟轴，0..32767，不受按钮重映射影响
+    int32_t raw[4];          // lx, ly, rx, ry; up is +y; inverting SDL -32768 permits +32768
+    int32_t out[4];          // Gamepad-only components after the radial dead zone, -32767..32767; no keyboard/mouse or scripts
+    int32_t deadzone[2];     // Percent
+    int32_t trigger[2];      // Physical ZL/ZR analog axes, 0..32767; unaffected by button remapping
     int motion_available, motion_enabled, motion_known;
-    float gyro[3];          // 仅 motion_known 时有效；Switch 轴向，rad/s
+    float gyro[3];          // Valid only when motion_known; Switch axes, rad/s
 } InputOverlayState;
 int input_overlay_state(InputOverlayState *s);
 // The menu's remapping rows (Controls tab). input_map_snapshot copies the tables in effect (after any changed TOTK_BIND_* line).

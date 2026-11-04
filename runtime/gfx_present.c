@@ -72,7 +72,7 @@ void gfx_window_focus_changed(int in) {
 void gfx_window_closed(void) {
     int restart = plat_cas32(&g_restart, 0, 0) != 0;
     rt_log("gfx: window closed; %s", restart ? "restarting" : "exiting");
-    // 绘制回调不获取 present 或队列锁；此处不持有 g_pl，可安全 join。
+    // Draw callbacks do not acquire present or queue locks; join here without g_pl held.
     perf_panel_close();
     input_panel_close();
     fs_save_flush();
