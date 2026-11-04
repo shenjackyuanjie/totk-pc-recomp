@@ -18,6 +18,8 @@
 #include <string.h>
 
 #include "cfg.h"
+#include "perf_panel.h"
+#include "input_panel.h"
 #include "flight.h"
 #include "fs.h"
 #include "gfx.h"
@@ -70,6 +72,9 @@ void gfx_window_focus_changed(int in) {
 void gfx_window_closed(void) {
     int restart = plat_cas32(&g_restart, 0, 0) != 0;
     rt_log("gfx: window closed; %s", restart ? "restarting" : "exiting");
+    // 绘制回调不获取 present 或队列锁；此处不持有 g_pl，可安全 join。
+    perf_panel_close();
+    input_panel_close();
     fs_save_flush();
     vk_pipeline_save();
     prof_write();   // plat_exit runs no atexit handlers
@@ -820,4 +825,6 @@ void gfx_window_start(void) {
     }
     plat_rmutex_unlock(&g_start_lock);
     vsync_ensure();
+    perf_panel_tick();
+    input_panel_tick();
 }
