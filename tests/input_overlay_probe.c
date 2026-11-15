@@ -42,7 +42,17 @@ int menu_is_open(void) { abort(); }
 int menu_cursor_pointer(void) { abort(); }
 void menu_toggle(void) { abort(); }
 void menu_perf_cycle(void) { abort(); }
-MotionFusion *motion_global(void) { abort(); }
+static MotionFusion probe_motion;
+static int bias_disconnect_resets;
+MotionFusion *motion_global(void) {
+    // Hotplug now clears calibration bias; every connected snapshot must still avoid the fusion.
+    if (pad || sensor_pad || sensor_ok) abort();
+    return &probe_motion;
+}
+void motion_bias_reset(MotionFusion *m) {
+    if (m != &probe_motion || pad || sensor_pad || sensor_ok) abort();
+    bias_disconnect_resets++;
+}
 void motion_feed(MotionFusion *m, const double a[3], const double g[3], uint64_t ns) { (void)m; (void)a; (void)g; (void)ns; abort(); }
 uint64_t kern_now_ns(void) { abort(); }
 // Menu and blocking notifications may reset gameplay state; snapshots must not run gameplay input transforms.
@@ -218,8 +228,11 @@ int main(void) {
     CHECK(gameplay_resets == resets_before);
     puts("PASS: snapshots do not consume the mouse wheel, request gameplay capture or reset gameplay state");
     CHECK(script_state == 0 && script_ev == NULL && rec_state == 0 && rec == NULL);
+    CHECK(bias_disconnect_resets == 0 && motion_thread == 0);
     SDL_CloseJoystick(joy); CHECK(SDL_DetachVirtualJoystick(id));
     CHECK(!input_overlay_state(&s));
+    CHECK(bias_disconnect_resets == 1 && motion_thread == 0);
+    puts("PASS: connected snapshots preserve gyro calibration; disconnect clears bias once without starting sensors");
     CHECK(!s.connected && !s.buttons && s.layout == -1 && !s.motion_known);
     CHECK(s.raw[0] == 0 && s.trigger[1] == 0 && s.labels[0] == PAD_LABEL_NONE);
     id = attach(&joy);
