@@ -42,6 +42,7 @@ int menu_is_open(void) { abort(); }
 int menu_cursor_pointer(void) { abort(); }
 void menu_toggle(void) { abort(); }
 void menu_perf_cycle(void) { abort(); }
+struct MotionFusion { int unused; };   // Identity-only test token; no fusion state is read.
 static MotionFusion probe_motion;
 static int bias_disconnect_resets;
 MotionFusion *motion_global(void) {
@@ -54,6 +55,8 @@ void motion_bias_reset(MotionFusion *m) {
     bias_disconnect_resets++;
 }
 void motion_feed(MotionFusion *m, const double a[3], const double g[3], uint64_t ns) { (void)m; (void)a; (void)g; (void)ns; abort(); }
+int motion_calibration_enabled(void) { abort(); }
+void motion_bias_load(MotionFusion *m) { (void)m; abort(); }
 uint64_t kern_now_ns(void) { abort(); }
 // Menu and blocking notifications may reset gameplay state; snapshots must not run gameplay input transforms.
 static int gameplay_resets;
