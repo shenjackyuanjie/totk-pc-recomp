@@ -72,6 +72,9 @@ def gating_check(work, table):
     source = (ROOT / 'runtime' / 'patches.c').read_text(encoding='utf-8')
     source = NL.join(x for x in source.splitlines() if not x.startswith('#include'))
     frame = (ROOT / 'runtime' / 'frame_rate.c').read_text(encoding='utf-8')
+    # Keep the real patch API declarations, including the ordered-site types and forward declarations.
+    host = (ROOT / 'runtime' / 'host.h').read_text(encoding='utf-8')
+    patch_api = host[host.index('void rt_patches_init(void);'):host.index('void frame_step_init(void);')]
     pre = '''#include <assert.h>
 #include <stdint.h>
 #include <stdatomic.h>
@@ -119,7 +122,7 @@ static void frame_limit_live(void) {}
 }
 '''
     c = work / 'gating.c'
-    c.write_text(pre + macro + source + frame_pre + extract_function(frame, 'step_store') + NL +
+    c.write_text(pre + patch_api + macro + source + frame_pre + extract_function(frame, 'step_store') + NL +
                  extract_function(frame, 'frame_step_init') + NL + main, encoding='utf-8')
     exe = work / ('gating.exe' if os.name == 'nt' else 'gating')
     subprocess.run([compiler(), '-std=gnu11', '-O1', '-UNDEBUG', str(c), '-o', str(exe)], check=True)
