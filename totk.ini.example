@@ -79,6 +79,14 @@
 # the CPU threads).
 # lib_prebuild = 1
 # lib_prebuild_threads = 4
+# Experimental: 1 keeps a render pass open through the game's own Barrier calls (ORDER_FRAGMENTS | INVALIDATE_TEXTURE) when
+# none of the pass's draws can write a storage buffer or image, making the writes visible to the next draw with a by-region
+# barrier instead of ending the pass. Scenes where the game issues about a thousand such barriers a frame (the water in
+# the Nachoyah Shrine, terrain decals) go from about 1200 passes and 10000 layout changes to about 130 passes and 150;
+# the GPU time there fell from 24.5 to 7.8 ms a frame. The game's barrier orders every pixel, the one inside the pass only
+# the pixel a draw writes: a driver that runs it per screen tile can show flicker or squares at the edges of water, decals
+# or particles (report any). Needs the feedback layout (the default). Read at start. Default: 0.
+# barrier_merge = 0
 # Build known pipelines ahead of time.
 # pipe_prebuild = 1
 # Threads that translate known shaders at start (1 to 64; default: half the CPU threads, at most 16).
@@ -462,13 +470,24 @@
 # to totk.exe.
 # mods_dir =
 # Load order, top first, names separated by |. The in-game menu (Mods) writes it; a mod not listed goes to the bottom.
+# The higher mod wins whatever two mods both change: a file, bytes of the game's data, an instruction of its code.
+# Read at start.
 # mods_order =
 # Mods switched off, names separated by |.
 # mods_disabled =
+# Mods used without their code part, names separated by |: the Mods tab's switch "Use <mod> without its code". Such a
+# mod's code modules (exefs/subsdk*, a replaced exefs/main) and the ExeFS patch files the port cannot apply are left out
+# and the rest of it is used, where otherwise the whole mod stays off. Read at start.
+# mods_no_code =
 # auto: when an enabled mod has cheats that change the game's code and the game was built without them, the game starts
 # the setup's rebuild at start (a few minutes) and starts again after it. off: the game starts with the code it has.
 # A rebuild that failed or was cancelled is not started again for the same cheats. Default: auto.
 # mods_rebuild = auto
+# 1: every mod is used without the code part the port cannot run, as if mods_no_code named them all: its code modules
+# (exefs/subsdk*, a replaced exefs/main) and the ExeFS patch files the port cannot apply are left out, its RomFS files,
+# cheats and the other patch files load. Its files may expect the missing code. 0: only the mods mods_no_code names.
+# Read at start. Default: 0.
+# mods_without_code = 0
 # Extra room in MiB (0 to 4096) for the heap the world's textures stream into, for HD texture packs. Packs made for
 # emulators with 8 GB of DRAM grow it in their own HeapDef table (System/HeapSize/Product.Nin_NX_NVN.HeapDef.byml.zs):
 # the port reads that growth at start and applies it itself (about 3339 MiB for the HDPacks 4K pack), so such a pack
@@ -520,6 +539,11 @@
 # last one it finished. Unset: on AMD GPUs (VK_AMD_buffer_marker). 1: also on NVIDIA GPUs
 # (VK_NV_device_diagnostic_checkpoints), which NVIDIA says costs a little. 0: off.
 # pass_crumbs = 1
+# GPU address map: after a GPU memory fault (device lost) the log names the image or buffer that held the faulting
+# address and whether it was freed before the fault. 1: on, where the driver has VK_EXT_device_address_binding_report.
+# It slows the recording of GPU commands, on AMD's Windows driver more and more over a session, so turn it on only for
+# the run that reproduces the crash. Default: 0.
+# addr_report = 0
 # Render targets up to this size (bytes, 0 to 1073741824) go back to their game memory whenever the game waits for a
 # GPU fence. A larger target goes back too unless the GPU drew it in each of the last 16 frames. A game that reads a
 # larger target drawn every frame without invalidating it sees stale bytes at the default. With trace = gfx the log
