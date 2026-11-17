@@ -14,7 +14,7 @@ The built-in table is [recomp/patches-v110.txt](../recomp/patches-v110.txt). The
 | shadow | 1 | The sun shadow map takes its fixed size from page +92 before rounding. The shadow-resolution setting enables it; `shadow_res=game` leaves the game's sizing. |
 | cascade | 4 | Read the four sun shadow cascade defaults from page +64..76. Shadow range 100 leaves the original constructor. |
 
-At the current upstream baseline `6b0974f08d580571ebf16f6f1405367c61405eec`, the table has 13 sets and 51 instruction sites before this follow-up, and 15 sets and 54 instruction sites after adding one climb site and two gears sites. Its existing 889 spin back-edges are unchanged. The new sets use the existing runtime page and settings; no new setting, allocator or renderer path is introduced.
+At the current upstream baseline `6b0974f08d580571ebf16f6f1405367c61405eec`, the table has 14 sets and 51 instruction sites before this follow-up, and 16 sets and 54 instruction sites after adding one climb site and two gears sites. Its existing 889 spin back-edges are unchanged. The new sets use the existing runtime page and settings; no new setting, allocator or renderer path is introduced.
 
 The camera sites were cross-checked by normalized instruction-window matching from the local 1.0.0 main. The viewport routine has two matching copies: both are patched. Other sites were checked through their data flow: the equipment timer and its gate, the map clock, the ability clock, the NVN texture storage/package calls, the shadow size publication and the cascade parameter constructor. FOV's s8 is overwritten by the next original instruction; x10 is saved. The cursor sites use the same scratch registers as their 1.2.1 counterparts.
 
