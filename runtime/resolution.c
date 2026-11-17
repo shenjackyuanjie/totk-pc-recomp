@@ -510,9 +510,10 @@ static void shadow_init(uint8_t *page) {
 // ---- start: the patch page and the sets
 static uint64_t pack(unsigned w, unsigned h) { return (uint64_t)h << 32 | w; }
 
-// TOTK_SHADOW_RANGE (percent, 50 to 400; 100 = the game's): the sun's shadow cascades end at 20, 40, 80 and 160 m.
-// Other values multiply those distances through the cascade patch set (recomp/patches-v143.txt), so the sharp first
-// cascade reaches further and the visible steps between cascades move away from the player, at the cost of shadow
+// TOTK_SHADOW_RANGE (percent, 50 to 400; 100 = the game's): the sun's shadow cascades end at 20, 40, 80 and 160 m by
+// the depth shadow parameters' defaults; in the field the shadow controller computes the boundaries from the camera
+// each frame instead. Other values multiply the boundaries through the cascade patch set (recomp/patches-v143.txt and
+// patches-v121.txt; the controller's sites take page +64 over 20 as the factor), so the sharp first cascade reaches further and the visible steps between cascades move away from the player, at the cost of shadow
 // texels per metre (TOTK_SHADOW_SCALE pays that back).
 static void res_shadow_range(void) {
     int pct = cfg_int("TOTK_SHADOW_RANGE"), set = rt_patch_set("cascade");
@@ -625,10 +626,10 @@ int res_wants_wide_overlay(const unsigned out[2]) {
     return !res_is_16x9(out[0], out[1]) && rt_patch_set("aspect") >= 0;
 }
 
-// Field of view (TOTK_FOV, percent of the game's own, 70..140, live): the camera's vertical view angle times the
-// factor on page +60 (recomp/patches-v143.txt, set fov). The horizontal angle follows through the aspect ratio. 100
-// switches the set off, so the camera code is the game's own. Runs on a settings change (gfx_present.c
-// window_settings_live), the first time at the first present.
+// Field of view (TOTK_FOV, percent of the game's own, 70..140, live): the camera's vertical view angle times the factor
+// on page +60 (recomp/patches-v110.txt, patches-v121.txt and patches-v143.txt, set fov). The horizontal angle follows
+// through the aspect ratio. 100 switches the set off, so the camera code is the game's own. Runs on a settings change
+// (gfx_present.c window_settings_live), the first time at the first present.
 #define FOV_MIN 70
 #define FOV_MAX 140
 void res_fov_live(void) {
@@ -648,7 +649,7 @@ void res_fov_live(void) {
     rt_log("resolution: field of view %d%% of the game's", pct);
 }
 
-// TOTK_DYNAMIC_RES = 0 holds the game's dynamic resolution at 100 % (recomp/patches-v121.txt and patches-v143.txt,
+// TOTK_DYNAMIC_RES = 0 holds the game's dynamic resolution at 100 % (patches-v110.txt, patches-v121.txt and patches-v143.txt,
 // set fixres), so the scene renders at the size render_scale chose. The game picks its tier (100, 90 or 80 %) mostly
 // from a fixed cost model made for the Switch: one term grows with the object counts, one with (scene width / 1600)
 // squared. The GPU time it also measures (two NVN report timestamps, a frame apart) only lowers that prediction when the

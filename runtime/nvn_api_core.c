@@ -480,10 +480,11 @@ NVN_API(nvnQueueFenceSync) {
 // value, so no copy of that value itself picks up those writes. pa_fence: the newest fence at the latest present and
 // the one before, present thread only for writes. pa_guard: the newest value the game was told is done early.
 static uint64_t pa_fence[2], pa_guard;
-// The return address of that wait. 1.2.1: 0x7000b23dfc. 1.4.3: 0x70002db99c, the second of the two nvnSyncWait calls
-// in f_70002db8ac; like on 1.2.1 its sync comes from a two-entry ring indexed per frame, and the first call waits on
-// one object's sync behind a mode check. 0: no site known, the switch stays off.
+// The return address of that wait. 1.1.0: 0x7000b39aa4, 1.2.1: 0x7000b23dfc, 1.4.3: 0x70002db99c. The second
+// nvnSyncWait in 1.1.0 f_7000b39a00 and 1.4.3 f_70002db8ac uses the per-frame sync, like on 1.2.1; the first
+// call waits on one object's sync behind a mode check. 0: no site known, the switch stays off.
 static uint64_t frame_wait_lr(void) {
+    if (rt_game_version == 110) return 0x7000b39aa4ull;
     return rt_game_version == 121 ? 0x7000b23dfcull : rt_game_version == 143 ? 0x70002db99cull : 0;
 }
 static int sync_ahead(void) {
@@ -513,6 +514,7 @@ void nvn_sync_ahead_present(void) {
     __atomic_store_n(&pa_fence[0], nvn_fence_last(), __ATOMIC_RELEASE);
 }
 uint64_t nvn_sync_ahead_guard(void) { return __atomic_load_n(&pa_guard, __ATOMIC_ACQUIRE); }
+int nvn_sync_ahead_on(void) { return sync_ahead(); }
 
 // NVNsyncWaitResult nvnSyncWait(const NVNsync *s, uint64_t timeout_ns): a sync never fenced reports a timeout at once;
 // a fenced one is released only after the back end completed that fence value

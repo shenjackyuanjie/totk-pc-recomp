@@ -79,6 +79,11 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                                 "more video memory and GPU time. A wider size (21:9) widens the camera's view and moves "
                                 "the HUD to the screen's corners; a taller one (16:10, 3:2) moves it to the top "
                                 "and bottom edges.",
+    [UI_MENU_HUD_WIDTH] = "HUD width",
+    [UI_MENU_HUD_WIDTH_DESC] = "On a screen wider than 16:9, how far apart the HUD's left and right sides are. Full puts "
+                               "them at the screen's edges; 21:9 or 16:9 keeps the HUD within the middle of the screen "
+                               "of that shape. Prepare a missing layout in this tab or rerun setup, then restart.",
+    [UI_MENU_HUD_WIDTH_FULL] = "Full screen",
     [UI_MENU_RENDER_SCALE] = "3D render scale",
     [UI_MENU_RENDER_SCALE_DESC] = "Size of the 3D scene relative to the game resolution; the game's FSR scales it to "
                                   "that size. Above 100 % smooths jagged edges (supersampling) at a high GPU cost.",
@@ -98,7 +103,7 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                                   "bars, or stretch them over the whole picture. Applies from the next movie.",
     [UI_MENU_MOVIE_ASPECT_KEEP] = "Black bars", [UI_MENU_MOVIE_ASPECT_STRETCH] = "Stretch",
     [UI_MENU_FOV] = "Field of view",
-    [UI_MENU_FOV_DESC] = "How much of the world the camera shows, in percent of the game's own. Game versions 1.1.0 and 1.4.3.",
+    [UI_MENU_FOV_DESC] = "How much of the world the camera shows, in percent of the game's own. Game versions 1.1.0, 1.2.1 and 1.4.3.",
     [UI_MENU_SHADOW_RES] = "Shadow map size",
     [UI_MENU_SHADOW_RES_DESC] = "Size of the sun's shadow map. The game's own size changes with the view, down to about 400 "
                                 "near the ground, so leaf shadows look blocky and jump; a fixed size keeps them still and "
@@ -337,6 +342,17 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_DIALOGUE_CLICK_DESC] = "While a dialogue box is open, left click presses B (it continues the text and skips its scroll) and right click presses A, instead of the buttons they are bound to (Y by default, which opens the dialogue log, and ZL). Dialogue choices keep the pointer: left click picks (game 1.4.3).",
     [UI_MENU_POINTER_IMAGE] = "Game pointer",
     [UI_MENU_POINTER_IMAGE_DESC] = "While the cursor is not captured (the game's menus, this menu, after Esc), the window shows a gold arrowhead of its own instead of the system arrow, sized for the screen's scale.",
+    [UI_MENU_QUICKSAVE] = "Quick save and load",
+    [UI_MENU_QUICKSAVE_DESC] = "One key saves the game at once and another loads that save (the two rows below: F6 and F7 by default, as in Half-Life), with no menu on the screen. Keyboard and mouse keys only, game 1.4.3 only. Quick save asks the game for one of its own autosaves, so it replaces the oldest autosave (the manual save stays), keeps a copy of it as the quick save (the quicksave folder of the profile) and shows \"Game saved\" at the top of the picture. Quick load holds the picture on \"Loading the quick save\" while it goes through the game's load list out of sight, and the game loads the quick save (about 5 s). Where the game would not make an autosave itself (a cutscene, a dialogue), nothing is saved and the line says so.",
+    [UI_MENU_QUICKSAVE_KEY] = "Quick save key",
+    [UI_MENU_QUICKLOAD_KEY] = "Quick load key",
+    [UI_MENU_QUICKSAVE_KEY_DESC] = "The key that starts quick save or quick load; F6 and F7 by default, as in Half-Life. Select the cell and press any key or mouse button; Delete leaves that one without a key. While quick save is on, the two keys do nothing else (a note shows when a binding also uses the key). totk.ini takes any key name of the bindings (quicksave_key, quickload_key).",
+    [UI_QS_SAVED] = "Game saved",
+    [UI_QS_LOADING] = "Loading the quick save",
+    [UI_QS_NOT_NOW] = "Quick save is not possible right now",
+    [UI_QS_NONE] = "There is no quick save yet (the quick save key makes one)",
+    [UI_QS_FAILED] = "Quick save failed: see totk.log",
+    [UI_QS_LOAD_FAILED] = "Quick load failed: see totk.log",
     [UI_MENU_MOUSE_SENS] = "Mouse camera sensitivity",
     [UI_MENU_MOUSE_SENS_DESC] = "How fast the mouse turns the camera.",
     [UI_MENU_WALK_KEY] = "Walk key",
@@ -508,6 +524,12 @@ static const char *const text_en[UI_TEXT_COUNT] = {
     [UI_MENU_FIX_C0_DESC] = "Fills the driver-reserved constant bank c0 (storage sizes, dispatch size, point size, base instance) instead of reading zeros.",
     [UI_MENU_FIX_ZERO] = "Zero new GPU memory",
     [UI_MENU_FIX_ZERO_DESC] = "New GPU memory pools start zero-filled, as Switch memory does.",
+    [UI_MENU_DLAA_EFFECTS_AFTER] = "Fog and particles after DLAA",
+    [UI_MENU_DLAA_EFFECTS_AFTER_DESC] = "With DLAA, fog, dust and other particles are drawn over the picture DLSS has"
+                                        " already smoothed, as the game draws them without DLSS: small particles in "
+                                        "fog (shrines) no longer vanish or leave trails. Off: DLSS also processes "
+                                        "these effects, as before. DLAA mode only; the upscaling DLSS modes always "
+                                        "process them. Applies at once.",
     [UI_MENU_BIND_SKIP] = "Skip repeated binds",
     [UI_MENU_BIND_SKIP_DESC] = "Optimisation: skips bindings that did not change.",
     [UI_MENU_SHADER_MEMO] = "Shader memo", [UI_MENU_SHADER_MEMO_DESC] = "Optimisation: remembers shader lookups.",
@@ -598,6 +620,12 @@ static const char *const text_en[UI_TEXT_COUNT] = {
                                       "stays off while this mod is on.",
     [UI_MENU_MODS_CODE_SKIPPED] = "Its own game code (%s) does not load: the rest of the mod is used. Switch the mod "
                                   "off if the game misbehaves with it.",
+    [UI_MENU_MODS_PLUGIN_ON] = "Its plugin runs: %d hooks into the game code.",
+    [UI_MENU_MODS_PLUGIN_REFUSED] = "Its plugin %s cannot run in the port: %s.",
+    [UI_MENU_MODS_PLUGIN_STAYS_OFF] = "The whole mod stays off. Its switch \"Use ... without its code\" below uses the "
+                                      "rest of it.",
+    [UI_MENU_MODS_PLUGIN_OFF] = "Its plugin stays off this time: it started differently from the build (%s). The game "
+                                "rebuilds it at the next start.",
     [UI_MENU_MODS_WITHOUT_CODE] = "Use %s without its code",
     [UI_MENU_MODS_WITHOUT_CODE_DESC] = "The mod above brings code the port cannot run: its own game code (a subsdk "
                                        "plugin or a replaced main) or code patches (exefs) the port cannot apply. Off: "
@@ -662,6 +690,11 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
                                 "видеопамяти и времени GPU. Более широкий размер (21:9) расширяет обзор камеры и "
                                 "переносит интерфейс в углы экрана, более высокий (16:10, 3:2) переносит его к "
                                 "верхнему и нижнему краям.",
+    [UI_MENU_HUD_WIDTH] = "Ширина интерфейса",
+    [UI_MENU_HUD_WIDTH_DESC] = "На экране шире 16:9: как далеко друг от друга левая и правая части интерфейса. "
+                               "«Весь экран» ставит их у краёв экрана; 21:9 или 16:9 держит интерфейс в середине "
+                               "экрана такой формы. Подготовьте недостающую раскладку на этой вкладке или повторите установку, затем перезапустите игру.",
+    [UI_MENU_HUD_WIDTH_FULL] = "Весь экран",
     [UI_MENU_RENDER_SCALE] = "Масштаб 3D-отрисовки",
     [UI_MENU_RENDER_SCALE_DESC] = "Размер 3D-сцены относительно разрешения игры; FSR игры доводит её до этого размера. "
                                   "Выше 100 % сглаживает лесенки на краях (суперсэмплинг) ценой большой нагрузки на GPU.",
@@ -681,7 +714,7 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
                                   "растянуть их на всю картинку. Действует со следующего ролика.",
     [UI_MENU_MOVIE_ASPECT_KEEP] = "Чёрные полосы", [UI_MENU_MOVIE_ASPECT_STRETCH] = "Растянуть",
     [UI_MENU_FOV] = "Поле зрения",
-    [UI_MENU_FOV_DESC] = "Сколько мира показывает камера, в процентах от игрового. Для версий игры 1.1.0 и 1.4.3.",
+    [UI_MENU_FOV_DESC] = "Сколько мира показывает камера, в процентах от игрового. Для версий игры 1.1.0, 1.2.1 и 1.4.3.",
     [UI_MENU_SHADOW_RES] = "Размер карты теней",
     [UI_MENU_SHADOW_RES_DESC] = "Размер карты теней от солнца. Собственный размер игры меняется вместе с видом, у земли до "
                                 "примерно 400, поэтому тени листвы выглядят квадратными и дёргаются; постоянный размер делает "
@@ -919,6 +952,17 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_DIALOGUE_CLICK_DESC] = "Пока открыто окно диалога, левый щелчок нажимает B (продолжает текст и пропускает его прокрутку), а правый — A, вместо назначенных им кнопок (по умолчанию Y, она открывает журнал диалога, и ZL). В вариантах ответа по-прежнему работает указатель: левый щелчок выбирает (версия игры 1.4.3).",
     [UI_MENU_POINTER_IMAGE] = "Игровой курсор",
     [UI_MENU_POINTER_IMAGE_DESC] = "Пока курсор не захвачен (меню игры, это меню, после Esc), окно показывает собственный золотой наконечник вместо системной стрелки, по масштабу экрана.",
+    [UI_MENU_QUICKSAVE] = "Быстрое сохранение и загрузка",
+    [UI_MENU_QUICKSAVE_DESC] = "Одна клавиша сразу сохраняет игру, другая загружает это сохранение (две строки ниже: по умолчанию F6 и F7, как в Half-Life), без всяких меню на экране. Только клавиатура и мышь, только версия игры 1.4.3. Быстрое сохранение просит игру сделать одно из её собственных автосохранений, поэтому заменяет самое старое автосохранение (ручное сохранение остаётся), держит его копию как быстрое сохранение (папка quicksave профиля) и пишет «Игра сохранена» вверху экрана. Быстрая загрузка держит картинку с надписью «Загрузка быстрого сохранения», пока за кадром проходит список загрузки игры, и игра загружает быстрое сохранение (около 5 с). Где игра сама не стала бы автосохраняться (сценка, диалог), ничего не сохраняется, и надпись говорит об этом.",
+    [UI_MENU_QUICKSAVE_KEY] = "Клавиша быстрого сохранения",
+    [UI_MENU_QUICKLOAD_KEY] = "Клавиша быстрой загрузки",
+    [UI_MENU_QUICKSAVE_KEY_DESC] = "Клавиша, которая запускает быстрое сохранение или быструю загрузку; по умолчанию F6 и F7, как в Half-Life. Выберите ячейку и нажмите любую клавишу или кнопку мыши; Delete оставляет действие без клавиши. Пока быстрое сохранение включено, эти две клавиши больше ничего не делают (если клавиша занята в раскладке, это написано под значением). В totk.ini подходит любое имя клавиши из раскладки (quicksave_key, quickload_key).",
+    [UI_QS_SAVED] = "Игра сохранена",
+    [UI_QS_LOADING] = "Загрузка быстрого сохранения",
+    [UI_QS_NOT_NOW] = "Сейчас быстрое сохранение невозможно",
+    [UI_QS_NONE] = "Быстрого сохранения ещё нет (его делает клавиша быстрого сохранения)",
+    [UI_QS_FAILED] = "Быстрое сохранение не удалось: см. totk.log",
+    [UI_QS_LOAD_FAILED] = "Быстрая загрузка не удалась: см. totk.log",
     [UI_MENU_MOUSE_SENS] = "Чувствительность мыши",
     [UI_MENU_MOUSE_SENS_DESC] = "Как быстро мышь поворачивает камеру.",
     [UI_MENU_WALK_KEY] = "Клавиша шага",
@@ -1094,6 +1138,12 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
     [UI_MENU_FIX_C0_DESC] = "Заполняет зарезервированный драйвером банк констант c0 (размеры хранилищ, размер запуска, размер точки, базовый экземпляр) вместо чтения нулей.",
     [UI_MENU_FIX_ZERO] = "Обнулять новую память GPU",
     [UI_MENU_FIX_ZERO_DESC] = "Новые пулы памяти GPU заполняются нулями, как память Switch.",
+    [UI_MENU_DLAA_EFFECTS_AFTER] = "Туман и частицы после DLAA",
+    [UI_MENU_DLAA_EFFECTS_AFTER_DESC] = "С DLAA туман, пыль и другие частицы рисуются поверх картинки, уже сглаженной"
+                                        " DLSS, как игра рисует их без DLSS: мелкие частицы в тумане (святилища) "
+                                        "больше не пропадают и не оставляют шлейфов. Выкл.: DLSS обрабатывает и эти "
+                                        "эффекты, как раньше. Только в режиме DLAA; режимы DLSS с повышением "
+                                        "разрешения обрабатывают их всегда. Применяется сразу.",
     [UI_MENU_BIND_SKIP] = "Пропуск повторных привязок",
     [UI_MENU_BIND_SKIP_DESC] = "Оптимизация: пропускает неизменившиеся привязки.",
     [UI_MENU_SHADER_MEMO] = "Память шейдеров", [UI_MENU_SHADER_MEMO_DESC] = "Оптимизация: запоминает поиск шейдеров.",
@@ -1185,6 +1235,12 @@ static const char *const text_ru[UI_TEXT_COUNT] = {
                                       "который выключен, пока этот мод включён.",
     [UI_MENU_MODS_CODE_SKIPPED] = "Его собственный код игры (%s) не загружается: используется остальная часть мода. "
                                   "Выключите мод, если игра с ним ведёт себя странно.",
+    [UI_MENU_MODS_PLUGIN_ON] = "Его плагин работает: перехватов в коде игры: %d.",
+    [UI_MENU_MODS_PLUGIN_REFUSED] = "Его плагин %s не может работать в порте: %s.",
+    [UI_MENU_MODS_PLUGIN_STAYS_OFF] = "Мод выключен целиком. Его переключатель «... без его кода» ниже включает "
+                                      "остальную часть мода.",
+    [UI_MENU_MODS_PLUGIN_OFF] = "Его плагин в этот раз выключен: он запустился не так, как при сборке (%s). Игра "
+                                "пересоберёт его при следующем запуске.",
     [UI_MENU_MODS_WITHOUT_CODE] = "%s без его кода",
     [UI_MENU_MODS_WITHOUT_CODE_DESC] = "Мод выше приносит код, который порт не может запустить: свой код игры (плагин "
                                        "subsdk или заменённый main) или патчи кода (exefs), которые порт не может "
@@ -1286,6 +1342,11 @@ static const char *const text_pt_br[UI_TEXT_COUNT] = {
                                 "precisa de mais memória de vídeo e tempo de GPU. Um tamanho mais largo (21:9) amplia a "
                                 "visão da câmera e leva o HUD para os cantos da tela; um mais alto (16:10, 3:2) "
                                 "leva-o para as bordas de cima e de baixo.",
+    [UI_MENU_HUD_WIDTH] = "Largura do HUD",
+    [UI_MENU_HUD_WIDTH_DESC] = "Em uma tela mais larga que 16:9: a distância entre os lados esquerdo e direito do HUD. "
+                               "Tela cheia os coloca nas bordas da tela; 21:9 ou 16:9 mantém o HUD no meio da tela "
+                               "desse formato. Prepare o layout ausente nesta aba ou execute a instalação novamente e reinicie o jogo.",
+    [UI_MENU_HUD_WIDTH_FULL] = "Tela cheia",
     [UI_MENU_RENDER_SCALE] = "Escala da renderização 3D",
     [UI_MENU_RENDER_SCALE_DESC] = "Tamanho da cena 3D em relação à resolução do jogo; o FSR do jogo a amplia até esse "
                                   "tamanho. Acima de 100 % suaviza bordas serrilhadas (supersampling) com alto custo de "
@@ -1529,6 +1590,12 @@ static const char *const text_pt_br[UI_TEXT_COUNT] = {
     [UI_MENU_FIX_C0_DESC] = "Preenche o banco de constantes c0 reservado ao driver (tamanhos de armazenamento, tamanho do dispatch, tamanho do ponto, instância base) em vez de ler zeros.",
     [UI_MENU_FIX_ZERO] = "Zerar memória nova da GPU",
     [UI_MENU_FIX_ZERO_DESC] = "Novos pools de memória da GPU começam zerados, como a memória do Switch.",
+    [UI_MENU_DLAA_EFFECTS_AFTER] = "Névoa e partículas após o DLAA",
+    [UI_MENU_DLAA_EFFECTS_AFTER_DESC] = "Com DLAA, a névoa, a poeira e outras partículas são desenhadas sobre a "
+                                        "imagem já suavizada pelo DLSS, como o jogo as desenha sem DLSS: partículas "
+                                        "pequenas na névoa (santuários) não somem mais nem deixam rastros. Desligado:"
+                                        " o DLSS também processa esses efeitos, como antes. Só no modo DLAA; os modos"
+                                        " de DLSS que aumentam a resolução sempre os processam. Aplica-se na hora.",
     [UI_MENU_BIND_SKIP] = "Pular bindings repetidos",
     [UI_MENU_BIND_SKIP_DESC] = "Otimização: pula bindings que não mudaram.",
     [UI_MENU_SHADER_MEMO] = "Memória de shaders", [UI_MENU_SHADER_MEMO_DESC] = "Otimização: lembra as buscas de shaders.",
@@ -1588,8 +1655,8 @@ static const char *const text_pt_br[UI_TEXT_COUNT] = {
     [UI_MENU_OV_FMT_FSR] = "AMD FSR 1, nitidez %d%%", [UI_MENU_OV_SCALE_NONE] = "nenhuma (1:1)",
     [UI_MENU_OV_SCALE_BILINEAR] = "bilinear",
     [UI_MENU_FOV] = "Campo de visão",
-    [UI_MENU_FOV_DESC] = "Quanto do mundo a câmera mostra, em porcentagem do original do jogo. Nas versões 1.1.0 e 1.4.3 do "
-                         "jogo.",
+    [UI_MENU_FOV_DESC] = "Quanto do mundo a câmera mostra, em porcentagem do original do jogo. Nas versões 1.1.0, 1.2.1 e 1.4.3 "
+                         "do jogo.",
     [UI_MENU_SHADOW_RES] = "Tamanho do mapa de sombras",
     [UI_MENU_SHADOW_RES_DESC] = "Tamanho do mapa de sombras do sol. O tamanho do jogo muda com a vista, até cerca de "
                                 "400 perto do chão, então as sombras das folhas ficam quadriculadas e pulam; um "
@@ -1662,6 +1729,17 @@ static const char *const text_pt_br[UI_TEXT_COUNT] = {
     [UI_MENU_DIALOGUE_CLICK_DESC] = "Enquanto uma caixa de diálogo está aberta, o clique esquerdo aperta B (continua o texto e pula a rolagem) e o direito aperta A, em vez dos botões aos quais estão atribuídos (Y por padrão, que abre o registro do diálogo, e ZL). As escolhas de diálogo continuam com o ponteiro: o clique esquerdo escolhe (jogo 1.4.3).",
     [UI_MENU_POINTER_IMAGE] = "Ponteiro do jogo",
     [UI_MENU_POINTER_IMAGE_DESC] = "Enquanto o cursor não está capturado (os menus do jogo, este menu, depois de Esc), a janela mostra uma ponta de flecha dourada própria em vez da seta do sistema, no tamanho da escala da tela.",
+    [UI_MENU_QUICKSAVE] = "Salvamento e carregamento rápidos",
+    [UI_MENU_QUICKSAVE_DESC] = "Uma tecla salva o jogo na hora e outra carrega esse salvamento (as duas linhas abaixo: F6 e F7 por padrão, como no Half-Life), sem nenhum menu na tela. Só teclado e mouse, só o jogo 1.4.3. O salvamento rápido pede ao jogo um dos seus próprios salvamentos automáticos, então substitui o salvamento automático mais antigo (o salvamento manual fica), guarda uma cópia dele como salvamento rápido (a pasta quicksave do perfil) e mostra \"Jogo salvo\" no alto da imagem. O carregamento rápido segura a imagem em \"Carregando o salvamento rápido\" enquanto passa pela lista de carregamento do jogo fora de vista, e o jogo carrega o salvamento rápido (cerca de 5 s). Onde o próprio jogo não faria um salvamento automático (uma cena, um diálogo), nada é salvo e a linha avisa.",
+    [UI_MENU_QUICKSAVE_KEY] = "Tecla de salvamento rápido",
+    [UI_MENU_QUICKLOAD_KEY] = "Tecla de carregamento rápido",
+    [UI_MENU_QUICKSAVE_KEY_DESC] = "A tecla que inicia o salvamento ou o carregamento rápido; F6 e F7 por padrão, como no Half-Life. Selecione a célula e aperte qualquer tecla ou botão do mouse; Delete deixa essa ação sem tecla. Com o salvamento rápido ligado, as duas teclas não fazem mais nada (uma nota aparece quando um mapeamento também usa a tecla). O totk.ini aceita qualquer nome de tecla dos mapeamentos (quicksave_key, quickload_key).",
+    [UI_QS_SAVED] = "Jogo salvo",
+    [UI_QS_LOADING] = "Carregando o salvamento rápido",
+    [UI_QS_NOT_NOW] = "Salvamento rápido não é possível agora",
+    [UI_QS_NONE] = "Ainda não há salvamento rápido (a tecla de salvamento rápido faz um)",
+    [UI_QS_FAILED] = "O salvamento rápido falhou: veja o totk.log",
+    [UI_QS_LOAD_FAILED] = "O carregamento rápido falhou: veja o totk.log",
     [UI_MENU_PROMPTS_MISSING] = "faltam os arquivos dos ícones: execute a instalação de novo",
     [UI_MENU_PROMPTS_FAILED] = "arquivos dos ícones danificados: execute a instalação de novo",
     [UI_MENU_PROMPTS_RESTART] = "os ícones mudam após reiniciar",
@@ -1806,6 +1884,12 @@ static const char *const text_pt_br[UI_TEXT_COUNT] = {
                                       "%s, que fica desligado enquanto este mod está ligado.",
     [UI_MENU_MODS_CODE_SKIPPED] = "O código próprio do jogo dele (%s) não é carregado: o resto do mod é usado. "
                                   "Desligue o mod se o jogo se comportar mal com ele.",
+    [UI_MENU_MODS_PLUGIN_ON] = "O plugin dele está ativo: %d ganchos no código do jogo.",
+    [UI_MENU_MODS_PLUGIN_REFUSED] = "O plugin %s dele não pode rodar no port: %s.",
+    [UI_MENU_MODS_PLUGIN_STAYS_OFF] = "O mod inteiro fica desligado. A chave \"Usar ... sem o código dele\", abaixo, "
+                                      "usa o resto dele.",
+    [UI_MENU_MODS_PLUGIN_OFF] = "O plugin dele fica desligado desta vez: ele iniciou de forma diferente da compilação "
+                                "(%s). O jogo o recompila na próxima inicialização.",
     [UI_MENU_MODS_WITHOUT_CODE] = "Usar %s sem o código dele",
     [UI_MENU_MODS_WITHOUT_CODE_DESC] = "O mod acima traz código que o port não consegue rodar: código próprio do jogo "
                                        "(um plugin subsdk ou um main substituído) ou patches de código (exefs) que o "
@@ -1920,6 +2004,11 @@ static const char *const text_zh_hans[UI_TEXT_COUNT] = {
                                 "高于 1920 x 1080 会占用更多显存和 GPU 时间。"
                                 "更宽的尺寸（21:9）会扩大视野，并把界面移到屏幕四角；"
                                 "更高的尺寸（16:10、3:2）则移到上下边缘。",
+    [UI_MENU_HUD_WIDTH] = "界面宽度",
+    [UI_MENU_HUD_WIDTH_DESC] = "在比 16:9 更宽的屏幕上，界面左右两侧相距多远。"
+                               "“整个屏幕”把它们放在屏幕边缘；21:9 或 16:9 则把界面保持在屏幕中间该比例的区域内。"
+                               "请在此选项卡准备缺少的布局，或重新运行安装程序，然后重启游戏。",
+    [UI_MENU_HUD_WIDTH_FULL] = "整个屏幕",
     [UI_MENU_RENDER_SCALE] = "3D 渲染比例",
     [UI_MENU_RENDER_SCALE_DESC] = "3D 场景相对于游戏分辨率的尺寸；"
                                   "游戏的 FSR 会将其缩放到该尺寸。"
@@ -1944,7 +2033,7 @@ static const char *const text_zh_hans[UI_TEXT_COUNT] = {
     [UI_MENU_MOVIE_ASPECT_STRETCH] = "拉伸",
     [UI_MENU_FOV] = "视野",
     [UI_MENU_FOV_DESC] = "镜头能看到多大范围，以游戏自身视野的百分比表示。"
-                          "支持游戏版本 1.1.0 和 1.4.3。",
+                          "支持游戏版本 1.1.0、1.2.1 和 1.4.3。",
     [UI_MENU_SHARPNESS] = "FSR 锐度",
     [UI_MENU_SHARPNESS_DESC] = "FSR 缩放后的锐化强度；0 为关闭。",
     [UI_MENU_COLOR] = "色彩",
@@ -2267,6 +2356,10 @@ static const char *const text_zh_hans[UI_TEXT_COUNT] = {
                             "基础实例），而不是读取零值。",
     [UI_MENU_FIX_ZERO] = "清零新的 GPU 内存",
     [UI_MENU_FIX_ZERO_DESC] = "新的 GPU 内存池初始内容为零，与 Switch 内存一致。",
+    [UI_MENU_DLAA_EFFECTS_AFTER] = "DLAA 之后绘制雾和粒子",
+    [UI_MENU_DLAA_EFFECTS_AFTER_DESC] = "开启 DLAA 时，雾、灰尘和其他粒子绘制在 DLSS 已平滑的画面之上，与游戏不用 DLSS 时的"
+                                        "绘制方式相同：雾中的细小粒子（神庙中）不再消失，也不再留下拖影。关闭：DLSS 也处理这些效果，与以"
+                                        "前相同。仅用于 DLAA 模式；提升分辨率的 DLSS 模式始终处理它们。立即生效。",
     [UI_MENU_BIND_SKIP] = "跳过重复绑定",
     [UI_MENU_BIND_SKIP_DESC] = "优化：跳过没有变化的绑定。",
     [UI_MENU_SHADER_MEMO] = "着色器查找缓存",
@@ -2393,6 +2486,17 @@ static const char *const text_zh_hans[UI_TEXT_COUNT] = {
     [UI_MENU_DIALOGUE_CLICK_DESC] = "对话框打开时，鼠标左键按下 B 键（继续对话并跳过文字滚动），右键按下 A 键，而不是它们所绑定的按键（默认为 Y，会打开对话记录；以及 ZL）。对话选项仍使用指针：左键选择（游戏 1.4.3）。",
     [UI_MENU_POINTER_IMAGE] = "游戏指针",
     [UI_MENU_POINTER_IMAGE_DESC] = "光标未被捕获时（游戏菜单、本菜单、按 Esc 之后），窗口显示自带的金色箭头，而不是系统箭头，大小随屏幕缩放。",
+    [UI_MENU_QUICKSAVE] = "快速存档与读档",
+    [UI_MENU_QUICKSAVE_DESC] = "一个键立即保存游戏，另一个键读取该存档（见下方两行：默认 F6 和 F7，与 Half-Life 相同），屏幕上不会出现任何菜单。仅限键盘和鼠标按键，仅限游戏 1.4.3。快速存档会让游戏自己进行一次自动存档，因此会替换最旧的自动存档（手动存档保留），并将其副本保存为快速存档（配置文件中的 quicksave 文件夹），画面顶部显示“游戏已保存”。快速读档时画面停留在“正在读取快速存档”，同时在后台走完游戏的读档列表，游戏随即读取快速存档（约 5 秒）。在游戏本身不会自动存档的地方（过场动画、对话），不会保存，并会显示提示。",
+    [UI_MENU_QUICKSAVE_KEY] = "快速存档键",
+    [UI_MENU_QUICKLOAD_KEY] = "快速读档键",
+    [UI_MENU_QUICKSAVE_KEY_DESC] = "启动快速存档或快速读档的按键；默认 F6 和 F7，与 Half-Life 相同。选中该格后按下任意键盘按键或鼠标按键；按 Delete 则该操作没有按键。快速存档开启时，这两个键不再有其他作用（若按键映射也使用该键，值下方会有提示）。totk.ini 接受按键映射中的任意按键名（quicksave_key、quickload_key）。",
+    [UI_QS_SAVED] = "游戏已保存",
+    [UI_QS_LOADING] = "正在读取快速存档",
+    [UI_QS_NOT_NOW] = "现在无法快速存档",
+    [UI_QS_NONE] = "还没有快速存档（按快速存档键创建）",
+    [UI_QS_FAILED] = "快速存档失败：请查看 totk.log",
+    [UI_QS_LOAD_FAILED] = "快速读档失败：请查看 totk.log",
     [UI_MENU_PROMPTS_MISSING] = "缺少按键提示文件：请重新运行安装程序",
     [UI_MENU_PROMPTS_FAILED] = "按键提示文件已损坏：请重新运行安装程序",
     [UI_MENU_PROMPTS_RESTART] = "按键提示重启后生效",
@@ -2506,6 +2610,10 @@ static const char *const text_zh_hans[UI_TEXT_COUNT] = {
     [UI_MENU_MODS_EXEFS_ON] = "正在使用的代码补丁：%d 个文件。",
     [UI_MENU_MODS_REPLACES_BUILTIN] = "正在使用的代码补丁：%d 个文件。它们取代本移植自带的补丁 %s，此模组开启时该补丁保持关闭。",
     [UI_MENU_MODS_CODE_SKIPPED] = "它自带的游戏代码（%s）不会加载：模组的其余部分照常使用。如果游戏因此表现异常，请关闭此模组。",
+    [UI_MENU_MODS_PLUGIN_ON] = "它的插件正在运行：游戏代码中有 %d 处挂钩。",
+    [UI_MENU_MODS_PLUGIN_REFUSED] = "它的插件 %s 无法在移植版中运行：%s。",
+    [UI_MENU_MODS_PLUGIN_STAYS_OFF] = "整个模组保持关闭。打开下方它的“不带代码使用 ...”开关即可使用其余部分。",
+    [UI_MENU_MODS_PLUGIN_OFF] = "它的插件本次保持关闭：启动情况与构建时不同（%s）。游戏会在下次启动时重新构建它。",
     [UI_MENU_MODS_WITHOUT_CODE] = "不带代码使用 %s",
     [UI_MENU_MODS_WITHOUT_CODE_DESC] = "上方的模组带有移植版无法运行的代码：它自己的游戏代码（subsdk 插件或替换的 main），或移植版无法应用的代码补丁（exefs）。关闭：整个模组保持关闭。开启：跳过这些代码，使用模组的其余部分：其 RomFS 文件、金手指和可用的代码补丁。它的文件可能依赖缺失的代码；如果游戏表现异常，请再次关闭。下次启动时生效。",
     [UI_MENU_MODS_WITHOUT_CODE_ALL] = "已对所有模组开启：totk.ini 中 mods_without_code = 1。",

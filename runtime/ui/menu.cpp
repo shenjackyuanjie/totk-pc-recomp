@@ -528,16 +528,18 @@ static void row_output_res(void) {
     // checks run again only when a setting or the started generation changes.
     static unsigned seen = ~0u;
     static int missing, started;   // started: 0 not asked, 1 running, -1 failed to start
-    static char asked[16];
+    static char asked[128];
+    char request[128];
     const char *now = cfg_value("TOTK_OUTPUT_RES");
+    const char *layout = cfg_value("TOTK_PAD_LAYOUT");
+    const char *want = input_prompts_folder(input_prompts_pick(cfg_get("TOTK_PROMPTS"), layout), layout);
+    snprintf(request, sizeof request, "%s|%s|%s", now, cfg_value("TOTK_HUD_WIDTH"), want ? want : "");
     if (seen != cfg_version()) {
         seen = cfg_version();
         unsigned w = 0, h = 0;
-        const char *layout = cfg_value("TOTK_PAD_LAYOUT");
-        const char *want = input_prompts_folder(input_prompts_pick(cfg_get("TOTK_PROMPTS"), layout), layout);
         missing = sscanf(now, "%ux%u", &w, &h) == 2 && romfs_shape_missing(w, h, want);
     }
-    int here = started && !strcmp(asked, now);   // the generation started for the value shown
+    int here = started && !strcmp(asked, request);   // resolution, selected HUD width and button prompts
     const char *note = !missing ? nullptr
                        : here   ? menu_text(started > 0 ? UI_MENU_OUTPUT_RES_PREPARING : UI_MENU_SHAPE_PREPARE_FAILED)
                                 : menu_text(UI_MENU_OUTPUT_RES_NO_LAYOUT);
@@ -545,11 +547,24 @@ static void row_output_res(void) {
     if (!missing || here || !romfs_shape_can_prepare()) return;
     if (!opt_button("##shape_prepare", UI_MENU_SHAPE_PREPARE, UI_MENU_SHAPE_PREPARE_DESC)) return;
     unsigned w = 0, h = 0;
-    const char *layout = cfg_value("TOTK_PAD_LAYOUT");
     sscanf(now, "%ux%u", &w, &h);
-    snprintf(asked, sizeof asked, "%s", now);
-    started = romfs_shape_prepare(w, h, input_prompts_folder(input_prompts_pick(cfg_get("TOTK_PROMPTS"), layout), layout))
-                  ? 1 : -1;
+    snprintf(asked, sizeof asked, "%s", request);
+    started = romfs_shape_prepare(w, h, want) ? 1 : -1;
+}
+
+// Offer only caps narrower than the canonical layout, using the same tolerance as romfs.c hud_suffix and Shapes.
+// This also keeps a selected 21:9 cap visible after changing to a slightly wider-than-21:9 game resolution.
+static void row_hud_width(void) {
+    unsigned w = 0, h = 0, shape[2];
+    if (sscanf(cfg_value("TOTK_OUTPUT_RES"), "%ux%u", &w, &h) != 2 || !h) return;
+    shape[0] = w, shape[1] = h;
+    cfg_shape_size(w, h, shape);
+    double aspect = (double)shape[0] / shape[1];
+    if (16.0 / 9 >= aspect * 0.99) return;
+    const char *vals[3] = {"full", "21:9", "16:9"}, *names[3] = {menu_text(UI_MENU_HUD_WIDTH_FULL), "21:9", "16:9"};
+    int n = 21.0 / 9 < aspect * 0.99 ? 3 : 2;
+    if (n == 2) vals[1] = vals[2], names[1] = names[2];
+    opt_choice_list("TOTK_HUD_WIDTH", UI_MENU_HUD_WIDTH, vals, names, n, UI_MENU_HUD_WIDTH_DESC);
 }
 
 static void row_render_scale(void) {
@@ -712,6 +727,7 @@ static void tab_screen(float scale) {
 #endif
     opt_group(UI_MENU_GRAPHICS);
     row_output_res();
+    row_hud_width();
     row_render_scale();
     opt_toggle("TOTK_DYNAMIC_RES", UI_MENU_DYNAMIC_RES, UI_MENU_DYNAMIC_RES_DESC);
     row_shadow_res();
@@ -741,6 +757,7 @@ static void tab_screen(float scale) {
     static const UiTextId chars[] = {UI_MENU_DLSS_CHARS_OFF, UI_MENU_DLSS_CHARS_LIGHT, UI_MENU_DLSS_CHARS_MEDIUM,
                                      UI_MENU_DLSS_CHARS_FULL};
     opt_choice("TOTK_DLSS_CHAR_MASK", UI_MENU_DLSS_CHARS, chars, 4, UI_MENU_DLSS_CHARS_DESC);
+    opt_toggle("TOTK_DLAA_EFFECTS_AFTER", UI_MENU_DLAA_EFFECTS_AFTER, UI_MENU_DLAA_EFFECTS_AFTER_DESC);
     static const UiTextId reflex[] = {UI_MENU_REFLEX_OFF, UI_MENU_REFLEX_ON, UI_MENU_REFLEX_BOOST};
     opt_choice("TOTK_REFLEX", UI_MENU_REFLEX, reflex, 3, UI_MENU_REFLEX_DESC);
     opt_toggle("TOTK_FXAA", UI_MENU_FXAA, UI_MENU_FXAA_DESC);
@@ -845,6 +862,21 @@ static int key_action(const InputMap *m, int key) {
     return -1;
 }
 
+// "also <action>" when the bindings also use the key the setting names, else NULL; note holds the text
+static const char *key_taken(const char *setting, char *note, size_t size) {
+    const char *cur = cfg_value(setting);
+    InputMap m;
+    input_map_snapshot(&m);
+    for (int k = KEY_A; k < KEY_COUNT; k++) {
+        if (!input_key_name(k) || strcasecmp(input_key_name(k), cur)) continue;
+        int a = key_action(&m, k);
+        if (a < 0 || !input_action_name(a)) return nullptr;
+        snprintf(note, size, menu_text(UI_MENU_WALK_KEY_TAKEN), input_action_name(a));
+        return note;
+    }
+    return nullptr;
+}
+
 // The walk key as the handful of keys a player is likely to pick. "none" rather than an empty value closes it: an
 // unset key falls back to the default in the settings table, the same as a fresh installation. totk.ini takes any name
 // input_map.c knows (walks of the keyboard sticks, not of the gamepad). A key the current bindings also use says which
@@ -852,18 +884,20 @@ static int key_action(const InputMap *m, int key) {
 static void row_walk_key(void) {
     static const char *const keys[] = {"none", "lshift", "lalt", "lctrl", "tab", "capslock"};
     const char *names[sizeof keys / sizeof *keys] = {menu_text(UI_MENU_OFF), "Shift", "Alt", "Ctrl", "Tab", "Caps Lock"};
-    const char *cur = cfg_value("TOTK_WALK_KEY");
     static char note[64];
-    const char *n = nullptr;
-    InputMap m;
-    input_map_snapshot(&m);
-    for (int k = KEY_A; k < KEY_COUNT && !n; k++) {
-        if (!input_key_name(k) || strcasecmp(input_key_name(k), cur)) continue;
-        int a = key_action(&m, k);
-        if (a >= 0 && input_action_name(a)) snprintf(note, sizeof note, menu_text(UI_MENU_WALK_KEY_TAKEN), input_action_name(a)), n = note;
-    }
     opt_choice_list("TOTK_WALK_KEY", UI_MENU_WALK_KEY, keys, names, sizeof keys / sizeof *keys, UI_MENU_WALK_KEY_DESC,
-                    -1, n);
+                    -1, key_taken("TOTK_WALK_KEY", note, sizeof note));
+}
+
+// Quick save's two keys (quicksave.c), F6 and F7 by default as Half-Life has them: any key or mouse button, taken by
+// the bindings' capture window (binds_key_row); Delete leaves that one without a key. A key the bindings also use says
+// which action it presses: while quick save is on it no longer does.
+static void row_quicksave_keys(void) {
+    static char note[2][64];
+    binds_key_row("TOTK_QUICKSAVE_KEY", UI_MENU_QUICKSAVE_KEY, UI_MENU_QUICKSAVE_KEY_DESC,
+                  key_taken("TOTK_QUICKSAVE_KEY", note[0], sizeof note[0]));
+    binds_key_row("TOTK_QUICKLOAD_KEY", UI_MENU_QUICKLOAD_KEY, UI_MENU_QUICKSAVE_KEY_DESC,
+                  key_taken("TOTK_QUICKLOAD_KEY", note[1], sizeof note[1]));
 }
 
 // The note under the prompts. The settings name a folder of prompts (input_prompts_folder: the prompts and the pad
@@ -995,6 +1029,8 @@ static void tab_controls(float scale) {
     opt_toggle("TOTK_MAP_CLICK", UI_MENU_MAP_CLICK, UI_MENU_MAP_CLICK_DESC);
     opt_toggle("TOTK_DIALOGUE_CLICK", UI_MENU_DIALOGUE_CLICK, UI_MENU_DIALOGUE_CLICK_DESC);
     opt_toggle("TOTK_POINTER_IMAGE", UI_MENU_POINTER_IMAGE, UI_MENU_POINTER_IMAGE_DESC);
+    opt_toggle("TOTK_QUICKSAVE", UI_MENU_QUICKSAVE, UI_MENU_QUICKSAVE_DESC);
+    row_quicksave_keys();
     row_walk_key();
     opt_slider("TOTK_WALK_SCALE", UI_MENU_WALK_SCALE, 0.2f, 0.9f, UI_MENU_WALK_SCALE_DESC, 0.01f, "%.2f");
     rows_gameplay_tweaks();
@@ -1277,7 +1313,13 @@ static void tab_mods(float scale) {
             if (count) snprintf(cheat, sizeof cheat, menu_text(UI_MENU_MODS_CHEATS), count);
             else snprintf(cheat, sizeof cheat, menu_text(UI_MENU_MODS_CHEATS_FILE), cheats_file());
         }
-        char code[512] = "", problem[512] = "", skipped[512] = "", left[512] = "";
+        char code[512] = "", problem[768] = "", skipped[512] = "", left[512] = "", plugin[512] = "";
+        if (m->plugin_off[0])   // its plugin's start differed from the build (plugin_init.c)
+            snprintf(plugin, sizeof plugin, menu_text(UI_MENU_MODS_PLUGIN_OFF), m->plugin_off);
+        else if (m->plugin_hooks && m->problem == MOD_OK)
+            snprintf(plugin, sizeof plugin, menu_text(UI_MENU_MODS_PLUGIN_ON), m->plugin_hooks);
+        else if (m->plugin_note[0] && m->problem != MOD_PLUGIN)   // used without its code: the refusal stays visible
+            snprintf(plugin, sizeof plugin, menu_text(UI_MENU_MODS_PLUGIN_REFUSED), m->plugin_file, m->plugin_note);
         if (m->code[0] && m->problem != MOD_PLUGIN)   // used without its code
             snprintf(skipped, sizeof skipped, menu_text(UI_MENU_MODS_CODE_SKIPPED), m->code);
         if (m->unsupported && m->problem != MOD_EXEFS_UNSUPPORTED)
@@ -1288,7 +1330,16 @@ static void tab_mods(float scale) {
             snprintf(code, sizeof code, menu_text(UI_MENU_MODS_EXEFS_ON), m->nsets + m->ndata);
         switch (m->problem) {
         case MOD_EMPTY: snprintf(problem, sizeof problem, "%s", menu_text(UI_MENU_MODS_EMPTY)); break;
-        case MOD_PLUGIN: snprintf(problem, sizeof problem, "%s", menu_text(UI_MENU_MODS_SUBSDK)); break;
+        case MOD_PLUGIN:
+            if (m->plugin_note[0]) {   // the build refused its plugin, and says why
+                int n = snprintf(problem, sizeof problem, menu_text(UI_MENU_MODS_PLUGIN_REFUSED), m->plugin_file,
+                                 m->plugin_note);
+                if (n >= 0 && n < (int)sizeof problem)
+                    snprintf(problem + n, sizeof problem - n, " %s", menu_text(UI_MENU_MODS_PLUGIN_STAYS_OFF));
+            } else {
+                snprintf(problem, sizeof problem, "%s", menu_text(UI_MENU_MODS_SUBSDK));
+            }
+            break;
         case MOD_EXEFS_LATER: snprintf(problem, sizeof problem, "%s", menu_text(UI_MENU_MODS_EXEFS_LATER)); break;
         case MOD_EXEFS_UNSUPPORTED:
             snprintf(problem, sizeof problem, menu_text(UI_MENU_MODS_EXEFS_UNSUPPORTED), m->note);
@@ -1298,7 +1349,8 @@ static void tab_mods(float scale) {
         default: break;
         }
         int k = snprintf(desc, sizeof desc, menu_text(UI_MENU_MODS_ROW_DESC), m->replaced, m->added);
-        const char *parts[] = {over, other, cheat, code, skipped, left, problem, menu_text(UI_MENU_MODS_MOVE_HINT)};
+        const char *parts[] = {over, other, cheat, code, plugin, skipped, left, problem,
+                               menu_text(UI_MENU_MODS_MOVE_HINT)};
         for (const char *part : parts)
             if (*part && k >= 0 && k < (int)sizeof desc) k += snprintf(desc + k, sizeof desc - k, "\n\n%s", part);
         const char *note = m->enabled && m->problem != MOD_OK ? menu_text(UI_MENU_MODS_UNUSED) : after;
@@ -1706,6 +1758,37 @@ static void perf_draw(const MenuTarget *t, float scale) {
     dl->AddText(ImVec2(p.x + pad, p.y + pad), IM_COL32(255, 255, 255, 235), g_perf_text);
 }
 
+// ---- a toast: one short line of ui_text at the top centre of the picture, over the game, for a few seconds and fading
+// out in its last half second (quick save's "Game saved", quicksave.c). Any thread sets it; the overlay draws it.
+static std::atomic<int> g_toast_text{-1};
+static std::atomic<uint64_t> g_toast_until{0};
+extern "C" void menu_toast(int text, int ms) {
+    g_toast_until.store(plat_now_ns() + (uint64_t)(ms > 0 ? ms : 1) * 1000000ull, std::memory_order_relaxed);
+    g_toast_text.store(text, std::memory_order_release);
+}
+
+static bool toast_live(void) {
+    return g_toast_text.load(std::memory_order_acquire) >= 0 &&
+           plat_now_ns() < g_toast_until.load(std::memory_order_relaxed);
+}
+
+static void toast_draw(const MenuTarget *t, float scale) {
+    int id = g_toast_text.load(std::memory_order_acquire);
+    uint64_t now = plat_now_ns(), until = g_toast_until.load(std::memory_order_relaxed);
+    if (id < 0 || id >= UI_TEXT_COUNT || now >= until) return;
+    double left_ms = (until - now) / 1e6;
+    float a = left_ms < 500 ? (float)(left_ms / 500) : 1.0f;
+    const char *text = ui_text((UiTextId)id);
+    ImDrawList *dl = ImGui::GetForegroundDrawList();
+    ImFont *font = ImGui::GetFont();
+    float size = ImGui::GetFontSize() * 1.25f, pad = 10 * scale;
+    ImVec2 sz = font->CalcTextSizeA(size, FLT_MAX, 0, text);
+    ImVec2 p((t->width - sz.x) / 2 - pad, 48 * scale);   // under the top edge, between the hearts and the corner
+    ImVec2 q(p.x + sz.x + 2 * pad, p.y + sz.y + 2 * pad);
+    dl->AddRectFilled(p, q, IM_COL32(0, 0, 0, (int)(160 * a)), 6 * scale);
+    dl->AddText(font, size, ImVec2(p.x + pad, p.y + pad), IM_COL32(255, 255, 255, (int)(240 * a)), text);
+}
+
 extern "C" int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const char **shot) {
     *shot = NULL;
     cheats_frame(frame);   // the data cheats and the buttons of the cheats that need them held
@@ -1724,7 +1807,7 @@ extern "C" int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const cha
             g_tab_request = 0;
             set_open(1);
             open = true;
-        } else if (!g_perf_mode) {
+        } else if (!g_perf_mode && !toast_live()) {
             return 0;
         }
     }
@@ -1776,6 +1859,7 @@ extern "C" int menu_overlay_frame(uint64_t frame, const MenuTarget *t, const cha
     ImGui::NewFrame();
     if (open) layout_menu(t->width, t->height, scale);
     perf_draw(t, scale);
+    toast_draw(t, scale);
     ImGui::Render();
     if (open) g_save_pending = opt_save_tick(0);
     g_cost_ns += plat_now_ns() - t0;

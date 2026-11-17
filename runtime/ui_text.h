@@ -34,6 +34,7 @@ typedef enum {
     UI_PERF_LINE_FPS,
     UI_MENU_GRAPHICS,         // group heading over the resolution rows
     UI_MENU_OUTPUT_RES, UI_MENU_OUTPUT_RES_DESC,
+    UI_MENU_HUD_WIDTH, UI_MENU_HUD_WIDTH_DESC, UI_MENU_HUD_WIDTH_FULL,
     UI_MENU_RENDER_SCALE, UI_MENU_RENDER_SCALE_DESC, UI_MENU_RENDER_SCALE_GAME,
     UI_MENU_DYNAMIC_RES, UI_MENU_DYNAMIC_RES_DESC,
     UI_MENU_UPSCALER, UI_MENU_UPSCALER_DESC, UI_MENU_UPSCALER_FSR, UI_MENU_UPSCALER_BILINEAR,
@@ -92,6 +93,10 @@ typedef enum {
     UI_MENU_MODS_EXEFS_ON,           // printf: its ExeFS patch files in use
     UI_MENU_MODS_REPLACES_BUILTIN,   // printf: its ExeFS patch files in use, the port's own patch sets they turn off
     UI_MENU_MODS_CODE_SKIPPED,       // printf: its code modules in exefs, which do not load (used without its code)
+    UI_MENU_MODS_PLUGIN_ON,          // printf: the hooks of its plugin (runtime/plugin_init.c) that run
+    UI_MENU_MODS_PLUGIN_REFUSED,     // printf: its plugin file, why the build refused it (English, from the tool)
+    UI_MENU_MODS_PLUGIN_STAYS_OFF,   // after UI_MENU_MODS_PLUGIN_REFUSED when the whole mod stays off
+    UI_MENU_MODS_PLUGIN_OFF,         // printf: why its plugin's start differed from the build (English)
     UI_MENU_MODS_WITHOUT_CODE,       // printf: the mod's name; its switch "use without its code" (TOTK_MODS_NO_CODE)
     UI_MENU_MODS_WITHOUT_CODE_DESC,
     UI_MENU_MODS_WITHOUT_CODE_ALL,   // why that switch cannot be changed: TOTK_MODS_WITHOUT_CODE=1
@@ -142,6 +147,8 @@ typedef enum {
     UI_MENU_MAP_CLICK, UI_MENU_MAP_CLICK_DESC,
     UI_MENU_DIALOGUE_CLICK, UI_MENU_DIALOGUE_CLICK_DESC,
     UI_MENU_POINTER_IMAGE, UI_MENU_POINTER_IMAGE_DESC,
+    UI_MENU_QUICKSAVE, UI_MENU_QUICKSAVE_DESC, UI_MENU_QUICKSAVE_KEY, UI_MENU_QUICKLOAD_KEY, UI_MENU_QUICKSAVE_KEY_DESC,
+    UI_QS_SAVED, UI_QS_LOADING, UI_QS_NOT_NOW, UI_QS_NONE, UI_QS_FAILED, UI_QS_LOAD_FAILED,
     UI_MENU_MOUSE_SENS, UI_MENU_MOUSE_SENS_DESC,
     UI_MENU_WALK_KEY, UI_MENU_WALK_KEY_DESC, UI_MENU_WALK_KEY_TAKEN, UI_MENU_WALK_SCALE, UI_MENU_WALK_SCALE_DESC,
 
@@ -237,7 +244,7 @@ typedef enum {
     UI_MENU_ASTC_BC, UI_MENU_ASTC_BC_DESC,
     UI_MENU_LOD_GUARD, UI_MENU_LOD_GUARD_DESC,
     UI_MENU_FIX_C0, UI_MENU_FIX_C0_DESC,
-    UI_MENU_FIX_ZERO, UI_MENU_FIX_ZERO_DESC,
+    UI_MENU_FIX_ZERO, UI_MENU_FIX_ZERO_DESC, UI_MENU_DLAA_EFFECTS_AFTER, UI_MENU_DLAA_EFFECTS_AFTER_DESC,
     UI_MENU_BIND_SKIP, UI_MENU_BIND_SKIP_DESC,
     UI_MENU_SHADER_MEMO, UI_MENU_SHADER_MEMO_DESC,
     UI_MENU_PIPE_MEMO, UI_MENU_PIPE_MEMO_DESC,

@@ -47,12 +47,12 @@ enum { ROMFS_PROMPTS_OK, ROMFS_PROMPTS_MISSING, ROMFS_PROMPTS_FAILED, ROMFS_PROM
        ROMFS_PROMPTS_PATCHES };
 const char *romfs_prompts(void);
 int romfs_prompts_ready(const char *folder);
-// 1 when the game resolution w x h is of another shape whose folders are missing: the UI layout, or that of
-// prompts_folder (a prompts' folder that is there at 16:9; NULL for the game's own prompts). romfs.c shaped_name.
+// 1 when w x h is of another shape whose selected HUD layout or prompts_folder's selected variant is missing.
+// NULL prompts_folder means the game's own prompts; a full-layout fallback does not satisfy a requested HUD cap.
 int romfs_shape_missing(unsigned w, unsigned h, const char *prompts_folder);
 // 1 when build-cache/rebuild.txt names the setup's Python and tools/make_romfs_patches.py and both exist, with romfs/.
 int romfs_shape_can_prepare(void);
-// Starts the generator for w x h's shape (its layout, and prompts_folder's when that is there at 16:9 and lacks it) as
+// Starts the generator for w x h's shape and selected HUD width (including prompts_folder's variant when needed) as
 // child processes the game does not wait for; the next start loads the result. 1 when every one started.
 int romfs_shape_prepare(unsigned w, unsigned h, const char *prompts_folder);
 int romfs_prompts_off(const char *folder);
@@ -66,3 +66,9 @@ int fs_save_busy(void);                                    // a save is being wr
                                                            // or save data changed in the last 3 s and not committed
 void fs_save_flush(void);                                  // wait for a save Commit still running in the background;
                                                            // every exit path calls it before the process ends
+uint32_t fs_save_commits(char *slot, size_t cap);          // commits that changed save files; slot: the save folder
+                                                           // (slot_00 ...) the last one wrote first
+int fs_save_copy_slot(const char *slot, const char *dst);  // a folder of the newest save copied to dst (replaced)
+void fs_save_read_from(const char *dir);                   // quick load: reads of save:/slot_NN/<file> open dir/<file>
+                                                           // while dir is set; NULL ends it
+int fs_save_read_from_hits(void);                          // opens redirected since the last fs_save_read_from(dir)
