@@ -28,9 +28,14 @@
 # highfps_fix = 1
 # Climbing walls and ladders at full speed above 60 fps; 30 and 60 fps are unchanged. Needs realtime = 1.
 # climb_fix = 1
-# The game's audio thread takes every queued sound command list each 5 ms instead of one, so the queue does not fill
-# above 200 fps, where the game would switch its sound off for good. 0 = the game's own code.
+# The game's audio thread takes every queued sound command list each 5 ms instead of one, so the queue does not stay
+# full above 200 fps. With the queue full through 300 updates the game switches its sound off for good: measured with
+# audio = none and after the game's audio stream was paused for 2 s and for 5 s in test runs, not while a device plays.
+# 0 = the game's own code.
 # audio_drain_fix = 1
+# Game 1.4.3: the two launchers in Tenbez Shrine throw the stone ball into the other launcher's seat above 30 fps.
+# 0 = the game's own speed, tuned for 30 fps.
+# shutter_fix = 1
 
 [performance]
 # The keys of this section and of [diagnostics] are for testing and troubleshooting, and take effect at the next start.
@@ -59,7 +64,7 @@
 # Let the game build the next frame while the GPU still draws the previous one, 0 or 1. Default: off. Each frame the
 # game waits once for the GPU to finish the frame it presented last; with 1 that wait covers the frame before it
 # instead. On Great Sky Island (Linux, RX 9070 XT) with shadow_defer = 1 this took about 73 to 100 fps. Costs one more
-# frame of input delay, and frame times vary more from frame to frame than with 0. GPU results the game reads back after that wait, for example occlusion queries, can be a frame old.
+# frame of input delay, and frame times vary more from frame to frame than with 0. GPU results the game reads back every frame after that wait, for example its depth queries, can be a frame old; a result it reads only once is waited for.
 # Works on 1.1.0, 1.2.1 and 1.4.3. Needs shadow storage (shadow below), which is on by default on Linux and
 # Wine and needs shadow = 1 on native Windows; without it the setting is ignored and the log says so.
 # sync_ahead = 0
@@ -308,6 +313,11 @@
 # frame before, DLSS is told to favour the current frame by this percentage (0, 35, 65 or 100; 0 off). Higher removes
 # more of the trails and leaves those edges a little less smooth. Changes while the game runs take effect at once.
 # dlss_char_mask = 65
+# 1: DLSS takes the brightness of the game's picture as it is (exposure 1) instead of estimating the exposure from each
+# frame. In dark scenes (the Depths) the estimate moves with the camera, and large fogged areas turn darker or lighter
+# for a frame. 0, the default: DLSS estimates the exposure itself, as before. Every DLSS mode. Changes while the game
+# runs take effect at once.
+# dlss_fixed_exposure = 0
 # With DLAA (dlaa = 1, dlss = dlaa), fog, dust and other particles are drawn over the picture DLSS has already smoothed,
 # as the game draws them without DLSS, so small particles in fog (shrines) no longer vanish or leave trails. 0: DLSS
 # processes these effects too, as before (the default until the inventory preview, the scope and water edges are
@@ -384,6 +394,12 @@
 # gyro and an attempt in progress is dropped; the four keys below stay in the file, so turning it back on restores the
 # last calibration.
 # gyro_calibration = 1
+# Gyro drift at rest (1 = on, off by default): whenever the controller lies still (on a table, not held) for half a second, the game
+# learns the drift left in its gyro, after the calibration above if there is one, and subtracts it, as the Switch's
+# hid service does for its own controllers. It catches a bias that changes as the controller warms up and works
+# without a calibration. The log says "gyro drift at rest learned" once it has settled. A controller held in the hand
+# is not learned from, and there is no dead zone, so slow aiming is untouched. Off, nothing is learned or subtracted.
+# gyro_auto_bias = 0
 # The measured bias in rad/s and the controller it was measured from, written by the game when calibration finishes;
 # they are not meant to be typed. The bias applies only while gyro_bias_pad names the connected controller (its name,
 # plus a hash of its serial number when it reports one), so another controller starts with no bias. One controller's
@@ -404,10 +420,11 @@
 # 0.1.9's xbox_prompts is read as nintendo with prompts = xbox.
 # pad_layout = auto
 # The buttons the game's prompts show: nintendo (the game's own), xbox (LB RB LT RT, Menu, View and a d-pad cross,
-# and A B X Y as labelled on the button pad_layout presses: with nintendo, A shows as B and X as Y). Read at start
-# (docs/controls.md, "Xbox button prompts"). pc: the key or mouse button the keyboard defaults press each button with
-# (E, Shift, Space, left click, Q, R, right click, F, Tab, M, 1 to 4, W A S D, Ctrl, C) and the mouse for the right
-# stick, whatever pad_layout (docs/controls.md, "PC button prompts").
+# and A B X Y as labelled on the button pad_layout presses: with nintendo, A shows as B and X as Y), playstation
+# (○ × △ □, L1 R1 L2 R2, Options and Share, on the button pad_layout presses: with nintendo, A shows as ○), or pc
+# (the key or mouse button the keyboard defaults press each button with: E, Shift, Space, left click, Q, R, right
+# click, F, Tab, M, 1 to 4, W A S D, Ctrl, C, and the mouse for the right stick, whatever pad_layout). Read at start
+# (docs/controls.md, "Xbox and PlayStation button prompts", "PC button prompts").
 # prompts = nintendo
 # Gamepad stick dead zone in percent of full deflection (0 to 50). Raise it for a stick that drifts: inside the circle
 # the stick reads centred, and the rest of its travel is scaled to start there.
