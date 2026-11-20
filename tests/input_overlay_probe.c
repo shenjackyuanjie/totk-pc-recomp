@@ -38,6 +38,10 @@ void ikb_mouse_take(int32_t *x, int32_t *y) { (void)x; (void)y; abort(); }
 float cam_speed_applied(void) { abort(); }
 uint64_t frame_step_ticks(void) { abort(); }
 int64_t frame_step_world_us(void) { abort(); }
+// Snapshots must not enter direct mouse, free-camera or sensor-update paths.
+int input_direct_mouse_active(void) { abort(); }
+int input_direct_mouse_enabled(void) { abort(); }
+int freecam_state(void) { abort(); }
 int menu_is_open(void) { abort(); }
 int menu_cursor_pointer(void) { abort(); }
 void menu_toggle(void) { abort(); }
@@ -55,6 +59,7 @@ void motion_bias_reset(MotionFusion *m) {
     bias_disconnect_resets++;
 }
 void motion_feed(MotionFusion *m, const double a[3], const double g[3], uint64_t ns) { (void)m; (void)a; (void)g; (void)ns; abort(); }
+void motion_restart(MotionFusion *m) { (void)m; abort(); }
 int motion_calibration_enabled(void) { abort(); }
 void motion_bias_load(MotionFusion *m) { (void)m; abort(); }
 uint64_t kern_now_ns(void) { abort(); }

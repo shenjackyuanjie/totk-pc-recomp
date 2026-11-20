@@ -15,7 +15,7 @@
  *
  * $out = "build/test/input"
  * New-Item -ItemType Directory -Force $out | Out-Null
- * clang -std=gnu11 -O1 -g -D_WIN32_WINNT=0x0A00 -I runtime tests/input_panel_probe.c runtime/ui_text.c runtime/cfg.c runtime/uiwindow_win.c runtime/platform/win32.c runtime/platform/common.c -luser32 -lgdi32 -lpsapi -lbcrypt -lole32 -lshell32 -luuid -lwinmm -o "$out/input_panel_probe.exe"
+ * clang -std=gnu11 -O1 -g -D_WIN32_WINNT=0x0A00 -I runtime tests/input_panel_probe.c runtime/ui_text.c runtime/cfg.c runtime/input_map.c runtime/uiwindow_win.c runtime/platform/win32.c runtime/platform/common.c -luser32 -lgdi32 -lpsapi -lbcrypt -lole32 -lshell32 -luuid -lwinmm -o "$out/input_panel_probe.exe"
  * & "$out/input_panel_probe.exe"
  * # Optional synthetic images: & "$out/input_panel_probe.exe" "$out/input-panel.bmp" "$out/input-panel-small.bmp"
  */
