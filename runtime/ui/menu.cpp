@@ -1644,8 +1644,6 @@ static void shown_tick(uint64_t now) {
     }
 }
 
-static int perf_mode_of(const char *s) { return !strcmp(s, "full") ? 2 : !strcmp(s, "fps") ? 1 : 0; }
-
 extern "C" void menu_perf_cycle(void) {
     static const char *const modes[] = {"off", "fps", "full"};
     cfg_set("TOTK_PERF_OVERLAY", modes[(perf_display_mode(cfg_value("TOTK_PERF_OVERLAY")) + 1) % 3]);
