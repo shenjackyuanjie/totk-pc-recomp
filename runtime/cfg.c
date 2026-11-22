@@ -42,9 +42,9 @@ static const char *const known[] = {
     "BIND_ZL", "BIND_ZR", "BARRIER_MERGE", "BLOCK_VIEWS_3D", "CLIMB_FIX", "CLOTH_REALTIME", "COLOR_BRIGHTNESS", "COLOR_CONTRAST", "COLOR_GAMMA",
     "COLOR_PRESET", "COLOR_SATURATION", "CONTACT_DEBUG", "CONTACT_SHADOWS", "CORE_DIAG", "CRIT", "CRIT_OUT",
     "DESC_TEMPLATE", "DESWIZZLE", "DEVICE_PROFILE", "DIALOGUE_CLICK", "DISCORD_APP_ID", "DISCORD_IMAGE", "DISCORD_RPC", "DLAA", "DLAA_CAM_JITTER", "DLAA_EFFECTS_AFTER", "DLAA_JITTER", "DLAA_MV", "DLAA_MASKDEBUG", "DLAA_MVDEBUG", "DLAA_OBJMV", "DLAA_SURVEY", "DLAA_TIMES", "DLSS", "DLSS_CHAR_MASK", "DLSS_FIXED_EXPOSURE", "DLSS_PRESET", "DLSS_REACTIVE", "DUMP", "DUMP_BUF", "DUMP_DIR",
-    "DUMP_LOG", "DYNAMIC_RES", "DYN_DELTA", "EXEFS", "FEEDBACK", "FIXED_RES_PATCH", "FIX_C0", "FIX_ZERO", "FLIGHT", "FLIGHT_AT", "FLIGHT_DIR", "FLIGHT_FRAMES",
-    "FLIGHT_SPIKE_MS", "FLIGHT_THUMBS", "FLUSH_SPAN", "FOV", "FOV_PATCH", "FPS60", "FPS_LIMIT", "FRAME_QUEUE", "FREECAM_KEY", "FREECAM_PAD", "FREECAM_PATCH",
-    "FREEZE_IDLE", "FREE_CORES",
+    "DUMP_LOG", "DYNAMIC_RES", "DYN_DELTA", "EXEFS", "FEEDBACK", "FG_DEBUG", "FG_OBJECTS", "FG_SHOT", "FG_SHOT_DIR", "FG_TEST", "FG_TIMES", "FIXED_RES_PATCH", "FIX_C0", "FIX_ZERO", "FLIGHT", "FLIGHT_AT", "FLIGHT_DIR", "FLIGHT_FRAMES",
+    "FLIGHT_SPIKE_MS", "FLIGHT_THUMBS", "FLUSH_SPAN", "FOV", "FOV_PATCH", "FPS60", "FPS_LIMIT", "FRAME_GEN", "FRAME_QUEUE", "FREECAM_KEY", "FREECAM_PAD", "FREECAM_PATCH",
+    "FREEZE_IDLE", "FREE_CORES", "FSR3_DEBUG", "FSR3_VIEW", "FSR_SHARPNESS",
     "FULLSCREEN", "FXAA",
     "GAMEPLAY_DISTANCE_SENSITIVITY", "GAMEPLAY_ITEM_AD", "GAMEPLAY_ITEM_SENSITIVITY", "GAMEPLAY_ITEM_WHEEL",
     "GAMEPLAY_MAP_ZOOM", "GAMEPLAY_MAP_ZOOM_SENSITIVITY", "GAMEPLAY_ROTATION_SENSITIVITY", "GAMEPLAY_TWEAKS_ENABLED",
@@ -53,16 +53,16 @@ static const char *const known[] = {
     "GPL", "GPL_DRAW_BUILD", "GPU", "GPU_INDEX", "GPU_NAME", "GRASS_RANGE",
     "GYRO_AUTO_BIAS", "GYRO_BIAS_PAD", "GYRO_BIAS_X", "GYRO_BIAS_Y", "GYRO_BIAS_Z", "GYRO_CALIBRATION", "HDR", "HDR_GAME_NITS", "HDR_HUE",
     "HDR_PEAK_NITS", "HDR_UI_NITS", "HIGHFPS_FIX", "HUD_WIDTH", "INPUT", "INPUT_RECORD", "INPUT_SCRIPT", "INPUT_WINDOW", "KSPIN_US", "LANG", "LIB_PREBUILD",
-    "LIB_PREBUILD_KEEP", "LIB_PREBUILD_THREADS", "LOCALE", "LOD_GUARD", "LOD_STEADY", "LSTICK_DEADZONE", "MAP_CLICK", "MEMORY", "MEMX", "MENU_LANG", "MENU_TEST", "MENU_FONT_FONTCONFIG",
+    "LIB_PREBUILD_KEEP", "LIB_PREBUILD_THREADS", "LIGHTNING_FIX", "LOCALE", "LOD_GUARD", "LOD_STEADY", "LSTICK_DEADZONE", "MAP_CLICK", "MEMORY", "MEMX", "MENU_LANG", "MENU_TEST", "MENU_FONT_FONTCONFIG",
     "MEM_RESERVE_MIB", "MENU_CURSOR", "MENU_CURSOR_LOG", "MENU_TEST_DIR", "MENU_TEST_SET", "MINIMAL_LAYOUT", "MIRROR_GAP", "MODS_DIR", "MODS_DISABLED", "MODS_NO_CODE", "MODS_ORDER", "MODS_REBUILD", "MODS_WITHOUT_CODE", "MOTION", "MOUSE_AIM_SCALE", "MOUSE_MODE", "MOUSE_DIRECT_PATCH", "MOUSE_SENS", "MOVIE_ASPECT", "MOVIE_HOST", "MOVIE_PACE",
     "MVOBJ_ALL", "MVOBJ_BANKS", "MVOBJ_EQUAL", "MVOBJ_EXACT", "MVOBJ_EXEC", "MVOBJ_NOC4", "MVOBJ_ONLY", "MVOBJ_TIMES", "MVPREV_CHECK", "MVPREV_GROW", "MVPREV_SKIP", "MVPREV_TRUST", "MV_CHECK",
     "MV_SURVEY",
-    "ONE_PER_CORE", "OPERATION_MODE", "OPTREF_GUARD", "OUTPUT_RES", "PAD_LAYOUT", "PASS_CRUMBS", "PATCH_OUTPUT", "PATCH_SCENE", "PCORE", "PCSS", "PCSS_K", "PERF_OVERLAY", "PERF_SLOW_MS", "PERF_WINDOW", "PIPELINE_CACHE", "PIPE_MEMO", "PIPE_PREBUILD", "PIPE_SKIP", "PIPE_SYNC", "PIPE_WAIT", "PLUGIN_TICK_OFFSET", "PLUGIN_TRACE", "POINTER_IMAGE",
+    "ONE_PER_CORE", "OPERATION_MODE", "OPTREF_GUARD", "OUTPUT_RES", "PAD_LAYOUT", "PASS_CRUMBS", "PATCH_OUTPUT", "PATCH_SCENE", "PCORE", "PCSS", "PCSS_K", "PERF_CENSUS", "PERF_OVERLAY", "PERF_SLOW_MS", "PERF_WINDOW", "PIPELINE_CACHE", "PIPE_MEMO", "PIPE_PREBUILD", "PIPE_SKIP", "PIPE_SYNC", "PIPE_WAIT", "PLUGIN_TICK_OFFSET", "PLUGIN_TRACE", "POINTER_IMAGE",
     "PREWARM_XLATE", "PROBE_MOVIE", "PROBE_MOVIE_BENCH", "PROBE_MOVIE_SHOT", "PROFILE", "PROFILE_CHAINS", "PROFILE_DIR", "PROFILE_FRAMES",
     "PROFILE_MAIN", "PROFILE_RENDER", "PROMPTS", "PUSH_SKIP", "PUSH_STAGE", "QUICKLOAD_KEY", "QUICKSAVE", "QUICKSAVE_KEY", "RDOC", "RDOC_DIR", "RDOC_DLL", "REALTIME", "REC_ASYNC", "REC_END", "REC_SPIN_US", "REEXEC", "REFLEX",
     "RENDER_SCALE", "REPLAY_ASYNC", "REPLAY_CHUNKS", "REPLAY_CHUNK_DRAWS", "REPLAY_SKEW_US", "REPLAY_STATE_CHECK", "REPLAY_WORKERS",
     "REPLAY_CHECK", "REPORT_GUARD", "RESOLVE_CHECK", "RESTART_WAIT", "ROMFS", "ROMFS_INDEX", "ROMFS_MMAP", "ROMFS_MODS", "ROMFS_PATCHES",
-    "ROMFS_PROOF_DIR", "ROMFS_VERIFY", "RSTICK_DEADZONE", "RUMBLE", "RUMBLE_CURVE", "RUMBLE_STRENGTH", "RUMBLE_TRIGGERS", "SHADER_CACHE",
+    "ROMFS_PROOF_DIR", "ROMFS_VERIFY", "RSTICK_DEADZONE", "RUMBLE", "RUMBLE_CURVE", "RUMBLE_STRENGTH", "RUMBLE_TRIGGERS", "SCENE_UPSCALER", "SHADER_CACHE",
     "SHADER_MEMO", "SHADOW", "SHADOW_DEFER", "SHADOW_RANGE", "SHADOW_RES", "SHADOW_SCALE", "SHADOW_SNAP", "SHARED_FONTS", "SHARPNESS", "SHOTS", "SHOTS_DIR", "SHUTTER_FIX",
     "SHOTS_FULL", "SPEED_PROBE", "SPIN", "SPIN_HANDOFF_US", "SPLIT_DRAWS", "SPLIT_US", "STICK_DEADZONE", "STICK_SENS",
     "SWKBD_ANSWER", "SYNC_AHEAD",
@@ -74,9 +74,10 @@ static const char *const known[] = {
 
 // The totk.ini section a key cfg_set may write goes to when the file lacks it (totk.ini.example's sections).
 static const struct { const char *key, *section; } sections[] = {
-    {"FPS_LIMIT", "frame rate"}, {"FPS60", "frame rate"}, {"FRAME_QUEUE", "frame rate"},
+    {"FPS_LIMIT", "frame rate"}, {"FPS60", "frame rate"}, {"FRAME_QUEUE", "frame rate"}, {"FRAME_GEN", "frame rate"},
     {"REALTIME", "frame rate"}, {"CLOTH_REALTIME", "frame rate"}, {"HIGHFPS_FIX", "frame rate"},
     {"CLIMB_FIX", "frame rate"}, {"AUDIO_DRAIN_FIX", "frame rate"}, {"SHUTTER_FIX", "frame rate"},
+    {"LIGHTNING_FIX", "frame rate"},
     {"FULLSCREEN", "display"}, {"WINDOW_SIZE", "display"}, {"PERF_OVERLAY", "display"}, {"PERF_WINDOW", "display"}, {"INPUT_WINDOW", "display"}, {"VK_PRESENT", "display"},
     {"GPU_INDEX", "display"}, {"OUTPUT_RES", "display"}, {"RENDER_SCALE", "display"}, {"UPSCALER", "display"},
     {"HUD_WIDTH", "display"},
@@ -85,7 +86,7 @@ static const struct { const char *key, *section; } sections[] = {
     {"COLOR_BRIGHTNESS", "display"}, {"COLOR_CONTRAST", "display"}, {"COLOR_SATURATION", "display"},
     {"COLOR_GAMMA", "display"}, {"HDR", "display"}, {"HDR_PEAK_NITS", "display"}, {"HDR_GAME_NITS", "display"},
     {"HDR_UI_NITS", "display"}, {"HDR_HUE", "display"}, {"SHADOW_RES", "display"},
-    {"DLAA", "display"}, {"DLSS", "display"}, {"DLSS_PRESET", "display"}, {"DLSS_CHAR_MASK", "display"}, {"DLSS_FIXED_EXPOSURE", "display"}, {"DLAA_EFFECTS_AFTER", "display"}, {"REFLEX", "display"}, {"FXAA", "display"},
+    {"SCENE_UPSCALER", "display"}, {"DLAA", "display"}, {"DLSS", "display"}, {"FSR_SHARPNESS", "display"}, {"DLSS_PRESET", "display"}, {"DLSS_CHAR_MASK", "display"}, {"DLSS_FIXED_EXPOSURE", "display"}, {"DLAA_EFFECTS_AFTER", "display"}, {"REFLEX", "display"}, {"FXAA", "display"},
     {"DEVICE_PROFILE", "display"}, {"ASSUME_FOCUS", "display"},
     {"DISCORD_RPC", "discord"}, {"DISCORD_APP_ID", "discord"}, {"DISCORD_IMAGE", "discord"},
     {"SHADOW_SCALE", "display"}, {"SHADOW_RANGE", "display"}, {"GRASS_RANGE", "display"}, {"CONTACT_SHADOWS", "display"},
@@ -142,7 +143,9 @@ static const CfgMeta metas[] = {
     {"HUD_WIDTH", "full", "full|21:9|16:9", RESTART},
     {"DYNAMIC_RES", "1", "0|1", LIVE},   // resolution.c res_dynres_live
     {"UPSCALER", "fsr", "fsr|bilinear", LIVE}, {"SHARPNESS", "80", "0..100", LIVE},
-    {"DLAA", "0", "0|1", RESTART}, {"DLSS", "dlaa", "dlaa|quality|balanced|performance|ultra_performance", LIVE},
+    {"SCENE_UPSCALER", "off", "off|dlss|fsr3", RESTART}, {"DLAA", "0", "0|1", RESTART},
+    {"DLSS", "dlaa", "dlaa|quality|balanced|performance|ultra_performance", LIVE},
+    {"FSR_SHARPNESS", "80", "0..100", LIVE},   // vk_dlaa.c fsr_evaluate
     {"DLSS_PRESET", "default", "default|k|j", LIVE}, {"DLSS_FIXED_EXPOSURE", "0", "0|1", LIVE}, {"DLAA_EFFECTS_AFTER", "0", "0|1", LIVE},
     {"DLSS_CHAR_MASK", "65", "0|35|65|100", LIVE}, {"REFLEX", "off", "off|on|boost", RESTART}, {"FXAA", "1", "0|1", LIVE},
     {"LOD_STEADY", "0", "0|1", RESTART},   // sets steady
@@ -162,11 +165,12 @@ static const CfgMeta metas[] = {
     {"PCSS", "0", "0..200", RESTART},
     // Game
     {"FPS_LIMIT", "60", "30|40|45|60|90|120|144|display", LIVE}, {"FPS60", "1", "0|1", LIVE}, {"FRAME_QUEUE", "0", "0|1", LIVE},
+    {"FRAME_GEN", "off", "off|fsr3", LIVE},   // the generator; vk_fg.cpp vk_fg_engine maps it
     {"REALTIME", "1", "0|1", RESTART}, {"CLOTH_REALTIME", "1", "0|1", RESTART},
     {"MODS_REBUILD", "auto", "auto|off", RESTART},
     {"MODS_WITHOUT_CODE", "0", "0|1", RESTART},   // 1: a mod is used without the code module it cannot run (mods.c)
     {"HIGHFPS_FIX", "1", "0|1", RESTART}, {"CLIMB_FIX", "1", "0|1", RESTART}, {"AUDIO_DRAIN_FIX", "1", "0|1", RESTART},
-    {"SHUTTER_FIX", "1", "0|1", RESTART},
+    {"SHUTTER_FIX", "1", "0|1", RESTART}, {"LIGHTNING_FIX", "1", "0|1", RESTART},
     {"LANG", "", "ja|en-US|fr|de|it|es|zh-CN|ko|nl|pt|ru|zh-TW|en-GB|fr-CA|es-419|zh-Hans|zh-Hant|pt-BR", RESTART},
     {"OPERATION_MODE", "docked", "docked|handheld", RESTART},
     {"ASSUME_FOCUS", "1", "0|1", LIVE},   // read on every focus change (ov_system.c)
@@ -215,7 +219,7 @@ static const CfgMeta metas[] = {
     {"REPLAY_WORKERS", "0", "0..16", RESTART}, {"REPLAY_CHUNKS", "0", "0..64", RESTART},
     {"REPLAY_CHUNK_DRAWS", "128", "1..100000", RESTART}, {"REPLAY_STATE_CHECK", "0", "0|1", RESTART},
     {"REPLAY_SKEW_US", "0", "0..100000", RESTART},
-    {"SYNC_AHEAD", "0", "0|1", RESTART}, {"SHADOW_DEFER", "1", "0|1", RESTART},
+    {"SYNC_AHEAD", "0", "0|1|check", RESTART}, {"SHADOW_DEFER", "1", "0|1", RESTART},
     {"FREE_CORES", "0", "0|1", RESTART}, {"TIMER_1MS", "1", "0|1", RESTART},
     // shaders and pipelines
     {"PIPE_WAIT", "default", "default|draw", RESTART}, {"PIPE_SKIP", "fullscreen", "strict|any|fullscreen", RESTART},
@@ -857,4 +861,12 @@ void cfg_init(void) {
     if (profile_of())
         rt_log("cfg: device profile Steam Deck: defaults for the keys totk.ini does not set (TOTK_DEVICE_PROFILE=desktop "
                "turns it off)");
+}
+
+// scene_upscaler, or for a totk.ini that predates it the dlaa switch it replaced: dlaa = 1 is DLSS, anything else off.
+// FSR 3.1 is never the answer for a player who did not pick it. An unknown value is off.
+const char *cfg_scene_upscaler(void) {
+    if (!cfg_is_set("TOTK_SCENE_UPSCALER")) return cfg_bool("TOTK_DLAA") ? "dlss" : "off";
+    const char *v = cfg_value("TOTK_SCENE_UPSCALER");
+    return !strcmp(v, "dlss") ? "dlss" : !strcmp(v, "fsr3") ? "fsr3" : "off";
 }

@@ -42,8 +42,9 @@ objects Ninja just rebuilt (new mtime). A mismatch deletes the object, Ninja rec
 summary line. A fork checks the hardlinked generated objects against build/<version>/obj/objects.sha256 (read-only; a
 bad shared object stops the fork and asks for a main build run, which recompiles it and breaks the shared inode).
 
-Compile jobs share a memory budget (MEM_BUDGET, default the smaller of 50 GiB and 80% of RAM) at JOB_MEM per job, so a
-big machine does not run out of memory on the largest chunks. Each phase reports its wall time and the peak memory
+Compile jobs share a memory budget (compile_budget: the smaller of MEM_BUDGET = 50 GiB, 80% of RAM and, on Windows,
+80% of the memory free at the start) at JOB_MEM per job, so a big machine does not run out of memory on the largest
+chunks, nor a small one already running a browser and the setup. Each phase reports its wall time and the peak memory
 of its processes (Windows job object accounting: committed private bytes).
 
 --ninja PATH names the Ninja to run; without MSYS2 the bin/ninja.exe of the release folder (tools/make_release.py) is used.
@@ -77,6 +78,7 @@ import urllib.request
 from pathlib import Path
 
 import check_isa
+import hostmem
 import romfs_index
 from build_shaders import stale as stale_shaders
 from check_content import GENERATED_MARKER
@@ -220,6 +222,18 @@ GiB = 1 << 30
 # (295k-entry tables). 768 MiB leaves headroom for the largest file.
 JOB_MEM = 768 << 20
 MEM_BUDGET = 50 * GiB  # total for all compile jobs
+MEM_SHARE = 0.8        # of the RAM, and of the free memory, the compile jobs may take
+
+
+def compile_budget(total, free):
+    """Bytes the compile jobs may take together: MEM_BUDGET, MEM_SHARE of the RAM (total) and MEM_SHARE of the memory
+    free now (free: hostmem.available_ram, None when unknown). The total alone counted the RAM other programs hold: on
+    an 8 GiB PC with 3 GiB free it allowed 8 jobs of JOB_MEM (6 GiB), so the compile paged or a job ran out of memory.
+    recomp/gen.py sizes the lift workers from the free memory the same way."""
+    budget = min(MEM_BUDGET, int(total * MEM_SHARE))
+    if free is not None:
+        budget = min(budget, int(max(0, free) * MEM_SHARE))
+    return budget
 
 
 def below_root(p):
@@ -360,7 +374,8 @@ def runtime_sources(skip=()):
     """Every runtime/*.c, *.cpp, platform/*.c, *.rc, the in-game menu (ui/*.cpp) and Dear ImGui of this OS except the
     names in skip, so a task adds a file without editing this script."""
     pats = ('*.c', '*.cpp', 'platform/*.c', '*.rc', 'ui/*.cpp', 'third_party/imgui/*.cpp',
-            'third_party/imgui/backends/*.cpp')
+            'third_party/imgui/backends/*.cpp', 'third_party/FidelityFX/sdk/src/shared/*.cpp', 'third_party/FidelityFX/sdk/src/backends/vk/*.cpp',
+            'third_party/FidelityFX/sdk/src/components/*/*.cpp')
     return sorted(p for pat in pats for p in RUNTIME.glob(pat) if p.name not in skip and not other_os(p.name))
 
 
@@ -485,7 +500,10 @@ def ninja_file(gen, out, mods, pool_depth, skip=(), prebuilt=(), runtime_lib=Non
     inc = f'-I {cmd_path(RUNTIME)} -I {cmd_path(gen)}'
     vma = f'{cmd_path(DEPS / "include")} -I {cmd_path(DEPS / "include" / "vma")}' if DEPS else cmd_path(vma_include())
     imgui = cmd_path(RUNTIME / 'third_party' / 'imgui')
-    rt_inc = f'{inc} -I {cmd_path(out)} -I {vma} -I {imgui}'   # romfs_config.h, vk_mem_alloc.h (+ deps headers), imgui.h
+    ffx = RUNTIME / 'third_party' / 'FidelityFX'
+    ffx_inc = ' '.join(f'-I {cmd_path(d)}' for d in (ffx / 'sdk' / 'include', ffx / 'sdk' / 'src' / 'backends' / 'shared',
+                                                     ffx / 'spirv'))   # FidelityFX/host headers, ffx_shader_blobs.h, ffx_shaders_vk.h
+    rt_inc = f'{inc} -I {cmd_path(out)} -I {vma} -I {imgui} {ffx_inc}'   # romfs_config.h, vk_mem_alloc.h (+ deps headers), imgui.h
     libs = [f'-L {cmd_path(DEPS / "lib")}'] + (LLVM_LINK_LIBS if WIN else LINK_LIBS) if DEPS else LINK_LIBS
     lines = [
         '# Written by tools/build_game.py; do not edit.',
@@ -504,6 +522,14 @@ def ninja_file(gen, out, mods, pool_depth, skip=(), prebuilt=(), runtime_lib=Non
         '',
         'rule cc_rt',
         '  command = $cc $rtflags -MD -MF $out.d -c $in -o $out',
+        '  deps = gcc',
+        '  depfile = $out.d',
+        '  description = CC $in',
+        '',
+        # AMD's FidelityFX SDK sources (runtime/third_party/FidelityFX/sdk/src): ffx_compat.h is force-included so they
+        # build with clang (what MSVC's headers bring in on their own, the _s string functions); -w: AMD's code is not ours to fix
+        'rule cc_ffx',
+        f'  command = $cc $rtflags -include ffx_compat.h -I {cmd_path(ffx)} -I {cmd_path(ffx / "sdk" / "src" / "shared")} -w -MD -MF $out.d -c $in -o $out',
         '  deps = gcc',
         '  depfile = $out.d',
         '  description = CC $in',
@@ -544,7 +570,8 @@ def ninja_file(gen, out, mods, pool_depth, skip=(), prebuilt=(), runtime_lib=Non
                          f'{ninja_path(RUNTIME / "totk.ico")}')
         else:
             stamp_dep = (' | ' if not pgo else ' ') + ninja_path(stamp) if stamp else ''
-            lines.append(f'build {ninja_path(o)}: cc_rt {ninja_path(src)}{pgo}{stamp_dep}')
+            rule = 'cc_ffx' if src.is_relative_to(ffx / 'sdk') else 'cc_rt'
+            lines.append(f'build {ninja_path(o)}: {rule} {ninja_path(src)}{pgo}{stamp_dep}')
         rt.append(o)
     objs['runtime'] = rt
     every = [o for v in objs.values() for o in v]
@@ -1166,8 +1193,12 @@ def main():
     mods = {} if args.make_runtime_lib else {m: chunk_files(gen, m) for m in linked}
 
     cpus = os.cpu_count() or 1
-    budget = min(MEM_BUDGET, int(total_ram() * 0.8))
+    free = hostmem.available_ram()
+    budget = compile_budget(total_ram(), free)
     jobs = args.jobs or max(1, min(cpus, budget // JOB_MEM))
+    if not args.jobs:
+        print(f'build_game: {cpus} CPUs, {mib(budget)} for compile jobs'
+              f'{"" if free is None else f" ({mib(free)} free memory)"}', flush=True)
     plugins = read_plugin_files(gen)
     missing = [n for n in names if n not in hashes and n not in plugins]
     if missing:

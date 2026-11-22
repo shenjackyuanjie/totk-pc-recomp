@@ -57,6 +57,8 @@ void vk_queue_unlock(void);
 int vk_exec_replay_workers(void);
 void res_sizes(unsigned out[2], unsigned scene[2]);
 double frame_step_limit_hz(void);
+uint64_t gfx_presents_shown(void);   // gfx_present.c
+int gfx_frame_gen_live(void);        // vk_backend.c
 extern const int rt_game_version;
 extern const char rt_port_version[];
 void cheats_frame(uint64_t frame);   // cheats.c
@@ -617,6 +619,34 @@ static void row_hud_width(void) {
     opt_choice_list("TOTK_HUD_WIDTH", UI_MENU_HUD_WIDTH, vals, names, n, UI_MENU_HUD_WIDTH_DESC);
 }
 
+// The 3D scene upscaler (vk_dlaa.c): off, NVIDIA DLSS or AMD FSR 3.1. An engine that cannot run here is left out of
+// the steps, and the note under the value says why; a totk.ini that names it anyway shows it, with the same note.
+// Returns the value the settings name ("off", "dlss", "fsr3"; without scene_upscaler, dlaa = 1 is "dlss").
+static const char *row_scene_upscaler(void) {
+    static const char *const all[] = {"off", "dlss", "fsr3"};
+    static const int engines[] = {UPSCALER_OFF, UPSCALER_DLSS, UPSCALER_FSR3};
+    static const UiTextId ids[] = {UI_MENU_SCENE_UPSCALER_OFF, UI_MENU_SCENE_UPSCALER_DLSS, UI_MENU_SCENE_UPSCALER_FSR3};
+    const char *now = cfg_scene_upscaler();
+    const char *vals[3], *names[3];
+    static char note[256];
+    note[0] = 0;
+    int n = 0, cur = -1;
+    for (int i = 0; i < 3; i++) {
+        int why = vk_upscaler_missing(engines[i]);
+        if (why) {
+            UiTextId t = why == UPSCALER_MISSING_DLL ? UI_MENU_SCENE_UPSCALER_NO_DLSS_DLL : UI_MENU_SCENE_UPSCALER_NO_DLSS_GPU;
+            size_t k = strlen(note);
+            snprintf(note + k, sizeof note - k, "%s%s", k ? "; " : "", menu_text(t));
+        }
+        if (why && strcmp(now, all[i])) continue;
+        if (!strcmp(now, all[i])) cur = n;
+        vals[n] = all[i], names[n] = menu_text(ids[i]), n++;
+    }
+    opt_choice_list("TOTK_SCENE_UPSCALER", UI_MENU_SCENE_UPSCALER, vals, names, n, UI_MENU_SCENE_UPSCALER_DESC, cur,
+                    note[0] ? note : nullptr);
+    return cfg_scene_upscaler();
+}
+
 static void row_render_scale(void) {
     static const char *const vals[] = {"game", "50", "67", "75", "100", "125", "150", "200"};
     enum { N = sizeof vals / sizeof *vals };
@@ -798,17 +828,23 @@ static void tab_screen(float scale) {
     opt_toggle("TOTK_LOD_STEADY", UI_MENU_LOD_STEADY, UI_MENU_LOD_STEADY_DESC);
     opt_slider("TOTK_PCSS", UI_MENU_PCSS, 0, 200, UI_MENU_PCSS_DESC, 10, "%.0f %%");
     opt_slider("TOTK_CONTACT_SHADOWS", UI_MENU_CONTACT_SHADOWS, 0, 100, UI_MENU_CONTACT_SHADOWS_DESC, 10, "%.0f %%");
-    opt_toggle("TOTK_DLAA", UI_MENU_DLAA, UI_MENU_DLAA_DESC);
-    static const UiTextId dlss[] = {UI_MENU_DLSS_DLAA, UI_MENU_DLSS_QUALITY, UI_MENU_DLSS_BALANCED,
-                                    UI_MENU_DLSS_PERFORMANCE, UI_MENU_DLSS_ULTRA};
-    opt_choice("TOTK_DLSS", UI_MENU_DLSS, dlss, 5, UI_MENU_DLSS_DESC);
-    static const UiTextId preset[] = {UI_MENU_DLSS_PRESET_DEFAULT, UI_MENU_DLSS_PRESET_K, UI_MENU_DLSS_PRESET_J};
-    opt_choice("TOTK_DLSS_PRESET", UI_MENU_DLSS_PRESET, preset, 3, UI_MENU_DLSS_PRESET_DESC);
-    static const UiTextId chars[] = {UI_MENU_DLSS_CHARS_OFF, UI_MENU_DLSS_CHARS_LIGHT, UI_MENU_DLSS_CHARS_MEDIUM,
-                                     UI_MENU_DLSS_CHARS_FULL};
-    opt_choice("TOTK_DLSS_CHAR_MASK", UI_MENU_DLSS_CHARS, chars, 4, UI_MENU_DLSS_CHARS_DESC);
-    opt_toggle("TOTK_DLSS_FIXED_EXPOSURE", UI_MENU_DLSS_FIXED_EXPOSURE, UI_MENU_DLSS_FIXED_EXPOSURE_DESC);
-    opt_toggle("TOTK_DLAA_EFFECTS_AFTER", UI_MENU_DLAA_EFFECTS_AFTER, UI_MENU_DLAA_EFFECTS_AFTER_DESC);
+    const char *engine = row_scene_upscaler();
+    if (strcmp(engine, "off")) {   // the mode serves both engines
+        static const UiTextId dlss[] = {UI_MENU_DLSS_DLAA, UI_MENU_DLSS_QUALITY, UI_MENU_DLSS_BALANCED,
+                                        UI_MENU_DLSS_PERFORMANCE, UI_MENU_DLSS_ULTRA};
+        opt_choice("TOTK_DLSS", UI_MENU_DLSS, dlss, 5, UI_MENU_DLSS_DESC);
+    }
+    if (!strcmp(engine, "fsr3"))   // FSR 3.1's own sharpening (vk_dlaa.c fsr_evaluate)
+        opt_slider("TOTK_FSR_SHARPNESS", UI_MENU_FSR3_SHARPNESS, 0, 100, UI_MENU_FSR3_SHARPNESS_DESC, 5, "%.0f %%");
+    if (!strcmp(engine, "dlss")) {   // DLSS's model, its characters' mask and its other switches (FSR 3.1 has none)
+        static const UiTextId preset[] = {UI_MENU_DLSS_PRESET_DEFAULT, UI_MENU_DLSS_PRESET_K, UI_MENU_DLSS_PRESET_J};
+        opt_choice("TOTK_DLSS_PRESET", UI_MENU_DLSS_PRESET, preset, 3, UI_MENU_DLSS_PRESET_DESC);
+        static const UiTextId chars[] = {UI_MENU_DLSS_CHARS_OFF, UI_MENU_DLSS_CHARS_LIGHT, UI_MENU_DLSS_CHARS_MEDIUM,
+                                         UI_MENU_DLSS_CHARS_FULL};
+        opt_choice("TOTK_DLSS_CHAR_MASK", UI_MENU_DLSS_CHARS, chars, 4, UI_MENU_DLSS_CHARS_DESC);
+        opt_toggle("TOTK_DLSS_FIXED_EXPOSURE", UI_MENU_DLSS_FIXED_EXPOSURE, UI_MENU_DLSS_FIXED_EXPOSURE_DESC);
+        opt_toggle("TOTK_DLAA_EFFECTS_AFTER", UI_MENU_DLAA_EFFECTS_AFTER, UI_MENU_DLAA_EFFECTS_AFTER_DESC);
+    }
     static const UiTextId reflex[] = {UI_MENU_REFLEX_OFF, UI_MENU_REFLEX_ON, UI_MENU_REFLEX_BOOST};
     opt_choice("TOTK_REFLEX", UI_MENU_REFLEX, reflex, 3, UI_MENU_REFLEX_DESC);
     opt_toggle("TOTK_FXAA", UI_MENU_FXAA, UI_MENU_FXAA_DESC);
@@ -838,6 +874,8 @@ static void row_play_time(void) {
 static void tab_game(float scale) {
     opt_begin("##game", scale);
     row_fps_limit();
+    static const UiTextId frame_gen[] = {UI_MENU_FRAME_GEN_OFF, UI_MENU_FRAME_GEN_FSR3};
+    opt_choice("TOTK_FRAME_GEN", UI_MENU_FRAME_GEN, frame_gen, 2, UI_MENU_FRAME_GEN_DESC);
     opt_toggle("TOTK_FRAME_QUEUE", UI_MENU_FRAME_QUEUE, UI_MENU_FRAME_QUEUE_DESC);
     row_game_lang();
     static const UiTextId mode[] = {UI_MENU_MODE_DOCKED, UI_MENU_MODE_HANDHELD};
@@ -1588,6 +1626,25 @@ static uint64_t g_perf_last_ns, g_perf_win_ns, g_perf_max_ns;
 static int g_perf_frames;
 static char g_perf_text[96];
 
+// Frame generation shows more pictures than the game draws (vk_backend.c present_pair): the presents a second over the
+// last half second while it runs, else 0. The overlay's frame counts stay the frames the game drew. (PR #1089's
+// shown_tick, by xellow78-lgtm.)
+static double g_shown_fps;
+
+static void shown_tick(uint64_t now) {
+    static uint64_t t0, n0;
+    uint64_t n = gfx_presents_shown();
+    int live = gfx_frame_gen_live();
+    if (!live || !t0 || now - t0 > 2000000000ull) {
+        t0 = now, n0 = n;
+        if (!live) g_shown_fps = 0;
+    } else if (now - t0 >= 500000000ull) {
+        g_shown_fps = (double)(n - n0) * 1e9 / (double)(now - t0);
+        t0 = now, n0 = n;
+    }
+}
+
+static int perf_mode_of(const char *s) { return !strcmp(s, "full") ? 2 : !strcmp(s, "fps") ? 1 : 0; }
 
 extern "C" void menu_perf_cycle(void) {
     static const char *const modes[] = {"off", "fps", "full"};
@@ -1641,6 +1698,7 @@ extern "C" void menu_perf_update(VkPhysicalDevice phys) {
 }
 
 static void perf_tick(uint64_t now) {
+    if (g_perf_mode) shown_tick(now);
     if (g_perf_mode != 1) return;
     uint64_t d = now - g_perf_last_ns;
     if (!g_perf_last_ns || d > 2000000000ull) {   // first frame, or a stall the window should not average in
@@ -1651,7 +1709,9 @@ static void perf_tick(uint64_t now) {
         g_perf_frames++;
         if (d > g_perf_max_ns) g_perf_max_ns = d;
         if (g_perf_win_ns >= 500000000ull) {
-            snprintf(g_perf_text, sizeof g_perf_text, menu_text(UI_PERF_LINE_FPS), g_perf_frames * 1e9 / g_perf_win_ns);
+            double drawn = g_perf_frames * 1e9 / g_perf_win_ns;
+            if (g_shown_fps > 0) snprintf(g_perf_text, sizeof g_perf_text, menu_text(UI_PERF_LINE_FPS_GEN), drawn, g_shown_fps);
+            else snprintf(g_perf_text, sizeof g_perf_text, menu_text(UI_PERF_LINE_FPS), drawn);
             g_perf_win_ns = g_perf_max_ns = 0;
             g_perf_frames = 0;
         }
@@ -1700,13 +1760,14 @@ static void perf_label(UiTextId label, const ImVec4 &c) {
 
 static float perf_gb(float mb) { return mb < 0 ? -1 : mb / 1024; }
 
-// The picture lines: the window, the game image the present shows and the 3D scene it holds (resolution.c), how the
-// present scales the image to the window (gfx_present.c, the last present), the frame limit and the presentation mode
-// in use.
+// The picture lines: the window, the game image the present shows and the 3D scene it holds (resolution.c), the
+// temporal upscaler that scales the scene (vk_dlaa.c) with its mode, how the present scales the image to the window
+// (gfx_present.c, the last present), the frame limit, the presentation mode in use and, with frame generation, the
+// pictures shown a second.
 static void perf_picture(const MenuTarget *t, const ImVec4 &c) {
     unsigned out[2], scene[2];
     res_sizes(out, scene);
-    char v[6][64];
+    char v[8][64];
     snprintf(v[0], sizeof v[0], menu_text(UI_MENU_OV_FMT_SIZE), t->width, t->height);
     snprintf(v[1], sizeof v[1], menu_text(UI_MENU_OV_FMT_SIZE), (unsigned)t->image_w, (unsigned)t->image_h);
     snprintf(v[2], sizeof v[2], menu_text(UI_MENU_OV_FMT_SCENE), scene[0], scene[1], scene[0] * 100.0 / out[0]);
@@ -1725,17 +1786,38 @@ static void perf_picture(const MenuTarget *t, const ImVec4 &c) {
     if (hz > 0) snprintf(v[4], sizeof v[4], menu_text(UI_MENU_OV_FPS), hz);
     const char *pm = present_name(gfx_window_present_mode());
     snprintf(v[5], sizeof v[5], "%s", pm ? pm : menu_text(UI_MENU_OV_NONE));
-    static const UiTextId labels[6] = {UI_MENU_OV_WINDOW, UI_MENU_OV_OUTPUT, UI_MENU_OV_SCENE,
-                                       UI_MENU_OV_SCALING, UI_MENU_OV_LIMIT, UI_MENU_OV_PRESENT};
+    // the temporal upscaler that ran (vk_dlaa.c: it ran and has not failed) and its mode, after the scene it scales; the
+    // line is left out while none runs, so the overlay without one has the same lines as before the setting existed
+    int up = vk_upscaler_running();
+    if (up) {
+        const char *m = cfg_value("TOTK_DLSS");
+        UiTextId mt = !strcmp(m, "quality")             ? UI_MENU_DLSS_QUALITY
+                    : !strcmp(m, "balanced")            ? UI_MENU_DLSS_BALANCED
+                    : !strcmp(m, "performance")         ? UI_MENU_DLSS_PERFORMANCE
+                    : !strcmp(m, "ultra_performance") ? UI_MENU_DLSS_ULTRA
+                                                        : UI_MENU_DLSS_DLAA;
+        snprintf(v[6], sizeof v[6], "%s, %s",
+                 menu_text(up == UPSCALER_FSR3 ? UI_MENU_SCENE_UPSCALER_FSR3 : UI_MENU_SCENE_UPSCALER_DLSS),
+                 menu_text(mt));
+    }
+    // with frame generation: the pictures shown a second, of which the FPS row above counts the ones the game drew
+    if (g_shown_fps > 0) snprintf(v[7], sizeof v[7], menu_text(UI_MENU_OV_FPS), g_shown_fps);
+    static const UiTextId labels[8] = {UI_MENU_OV_WINDOW, UI_MENU_OV_OUTPUT,  UI_MENU_OV_SCENE,    UI_MENU_OV_SCALING,
+                                       UI_MENU_OV_LIMIT,  UI_MENU_OV_PRESENT, UI_MENU_OV_UPSCALER, UI_MENU_OV_SHOWN};
+    int order[8], n = 0;
+    order[n++] = 0, order[n++] = 1, order[n++] = 2;
+    if (up) order[n++] = 6;
+    order[n++] = 3, order[n++] = 4, order[n++] = 5;
+    if (g_shown_fps > 0) order[n++] = 7;
     if (!ImGui::BeginTable("##perfp", 2, ImGuiTableFlags_SizingFixedFit)) return;
     float vw = 0;
-    for (auto &s : v) vw = fmaxf(vw, ImGui::CalcTextSize(s).x);
+    for (int i = 0; i < n; i++) vw = fmaxf(vw, ImGui::CalcTextSize(v[order[i]]).x);
     ImGui::TableSetupColumn("##p0", ImGuiTableColumnFlags_WidthStretch);
     ImGui::TableSetupColumn("##p1", ImGuiTableColumnFlags_WidthFixed, vw);
-    for (int i = 0; i < 6; i++) {
-        perf_label(labels[i], c);
+    for (int i = 0; i < n; i++) {
+        perf_label(labels[order[i]], c);
         ImGui::TableNextColumn();
-        perf_right(v[i], false);
+        perf_right(v[order[i]], false);
     }
     ImGui::EndTable();
 }

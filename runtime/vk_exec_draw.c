@@ -1277,6 +1277,7 @@ static int bind_range(VkExec *ex, uint64_t addr, uint64_t size, uint64_t align, 
     }
     if (sp.offset % align == 0) {
         VK_MEM_USE(sp);
+        VK_AHEAD_READ(sp, addr, n, use);
         if (written) ub_written(ex, addr, n);
         *out = (VkDescriptorBufferInfo){sp.buffer, sp.offset, n};
         if (written)
@@ -2966,6 +2967,7 @@ static void bind_vertex_buffers(VkExec *ex) {
                 if (r->address && vk_mem_resolve(r->address, 1, &sp)) {
                     VK_MEM_USE(sp);
                     nb = sp.buffer, no = sp.offset, nsz = r->size && r->size < sp.avail ? r->size : sp.avail;
+                    VK_AHEAD_READ(sp, r->address, nsz, VK_MUSE_VB);
                     ncls = sp.cls, npool = sp.pool;
                 }
                 D->B.vin[b] = *r, D->B.vres |= 1u << b;
@@ -2986,7 +2988,7 @@ static void bind_vertex_buffers(VkExec *ex) {
     ex->recorded++;
     for (int b = lo; b <= hi; b++) {
         if (D->B.vcls[b]) vk_mem_count(D->B.vcls[b], VK_MUSE_VB, D->B.vsz[b]);
-        if ((rt_trace & RT_TRACE_PERF) && D->B.vpool[b]) vk_mem_bound_note(D->B.vpool[b]);
+        if (vk_mem_census_on && D->B.vpool[b]) vk_mem_bound_note(D->B.vpool[b]);
     }
     D->B.vb_valid = 1;
 }
@@ -3340,6 +3342,7 @@ static int prepare_draw(VkExec *ex, int prim, int32_t count, int restart) {
     }
     if (!ex->in_pass) ex->dirty |= VK_EXEC_DIRTY_VIEWPORT | VK_EXEC_DIRTY_SCISSOR;
     vk_exec_pass_begin(ex);
+    if (vk_dlaa_fg_on) vk_dlaa_hud(ex);   // frame generation: the picture before the HUD's first draw (vk_dlaa.c)
     VkRect2D sc = vk_exec_scissor(ex);
     if (!sc.extent.width || !sc.extent.height) return 0;
     if (!ex->prog) return warn_once(W_PROGRAM, "a draw without a bound program is skipped"), 0;
@@ -3526,7 +3529,7 @@ static int prepare_draw(VkExec *ex, int prim, int32_t count, int restart) {
     }
     D->B.st_pm = D->PM.valid;   // st is this draw's state, which PM holds while valid
     vk_dlaa_draw(ex);
-    int mo = ex->chunked && vk_dlaa_available();
+    int mo = ex->chunked && vk_objmv_wanted();
     if (mo) plat_mutex_lock(&mo_lock);
     vk_mvsurvey_draw(ex);
     vk_mvprev_draw(ex);
@@ -3574,6 +3577,7 @@ static struct {
     uint64_t no_out, storage, no_fs;   // variant without the extra output, with storage resources; no fs
     uint64_t other_cam;          // listed draws left out: their camera block is not the scene camera
     uint64_t lk[14][5];          // last-frame lookups per binding index: none, self, side, nearer, refused (another object)
+    uint64_t pv_cmp, pv_diff;    // TOTK_MVPREV_CHECK: last-frame copies compared with this snapshot's neighbour, differing
     uint64_t e_draws, e_pipe, e_dyn, e_push, e_pushw, e_sets, e_vb, e_setw, e_setreuse;   // emitted commands (summary)
 } MO;
 
@@ -3786,6 +3790,7 @@ static uint32_t mo_vertex_buffers(VkExec *ex) {
         if (!r->address || !vk_mem_resolve(r->address, 1, &sp)) continue;
         VK_MEM_USE(sp);
         v->b[b] = sp.buffer, v->o[b] = sp.offset, v->sz[b] = r->size && r->size < sp.avail ? r->size : sp.avail;
+        VK_AHEAD_READ(sp, r->address, v->sz[b], VK_MUSE_VB);
     }
     memcpy(MQ.vin, ex->vbuf, sizeof MQ.vin);
     MQ.vgen = gen;
@@ -3930,6 +3935,16 @@ static int mo_similar(const uint8_t *cur, const uint8_t *old, uint64_t n, int *c
     return 1;
 }
 
+// The banks mo_prev_block leaves at this frame's block (TOTK_MVPREV_SKIP, bit n: cn; default c9 and c11, see there).
+static uint32_t mo_skip(void) {
+    static long skip = -2;
+    if (skip == -2) {
+        const char *e = cfg_get("TOTK_MVPREV_SKIP");
+        skip = e && *e ? strtol(e, NULL, 16) : 1L << 9 | 1L << 11;
+    }
+    return (uint32_t)skip;
+}
+
 // Last frame's copy of a block, accepted when it is this frame's block a little changed (mo_similar,
 // which see): a block of another object the address rule found would make motion up. 1 and *out: found (the block itself
 // when it is unchanged, *changed 0); 0: none, the draw keeps this frame's block there.
@@ -3945,24 +3960,25 @@ static int mo_prev_block(int index, const p_bind_buf *u, VkDescriptorBufferInfo 
     // got 1-3 px of motion that flipped direction, three times the warp error of the camera's vectors. With c9 kept too,
     // the turning run is as good (object warp error 0.46 of the camera's). Why their copies are wrong is not known.
     // TOTK_MVPREV_SKIP=<hex bank mask> (test) replaces the default a00 (bit n: cn).
-    static long skip = -2;
-    if (skip == -2) {
-        const char *e = cfg_get("TOTK_MVPREV_SKIP");
-        skip = e && *e ? strtol(e, NULL, 16) : 1L << 9 | 1L << 11;
-    }
-    if (skip >> (index + 3) & 1) return 0;
+    if (mo_skip() >> (index + 3) & 1) return 0;
     uint64_t c0 = __builtin_ia32_rdtsc();
     int found = vk_mvprev_find(index, u->addr, u->size, &pa, &how);
     uint64_t c1 = __builtin_ia32_rdtsc();
     MO.cyc[0] += c1 - c0, MO.ncyc++, MO.big += n;
     if (index >= 0 && index < 14) MO.lk[index][found ? how : MVPREV_NONE]++;
-    if (!found || !vk_usnap_find(pa, n, UINT32_MAX, LIM.ubo_align, out)) return 0;
-    if (how == MVPREV_SELF) return 1;   // bound at the same address last frame: not written again
-    const uint8_t *map = vk_usnap_map(), *cur = vk_usnap_bytes(u->addr, n);
+    if (!found) return 0;
+    // bound at the same address last frame: not written again, this frame's copy
+    if (how == MVPREV_SELF) return vk_usnap_find(pa, n, UINT32_MAX, LIM.ubo_align, out);
+    const uint8_t *old, *cur;   // last frame's from last frame's snapshot (vk_usnap_prev), this frame's
+    if (!vk_usnap_prev(pa, n, LIM.ubo_align, out, &old)) return 0;
+    if (vk_mvprev_checking()) {   // the neighbour copy the snapshot took before last frame's was kept: the same bytes?
+        const uint8_t *nb = vk_usnap_bytes(pa, n);
+        if (nb) MO.pv_cmp++, MO.pv_diff += memcmp(nb, old, n) != 0;
+    }
+    cur = vk_usnap_bytes(u->addr, n);
     uint64_t c2 = __builtin_ia32_rdtsc();
     MO.cyc[1] += c2 - c1;
     if (!cur) return 0;
-    const uint8_t *old = map + out->offset;
     static long trust = -2;   // TOTK_MVPREV_TRUST=<hex bank mask> (test): the copy found is taken without the check
     if (trust == -2) {
         const char *e = cfg_get("TOTK_MVPREV_TRUST");
@@ -4002,22 +4018,31 @@ static void mvobj_draw_(VkExec *ex, const p_draw_idx *d, VkBuffer ib, VkDeviceSi
     // solid geometry only, which tests and writes the scene depth: effects, particles and screen quads write none, and
     // drawn again they would put their motion on the surfaces behind them (DLSS takes those from the surface)
     if (!D->B.st.ds.dt || !D->B.st.ds.dw) return;
-    // a vertex shader that reads a user bank besides the camera's (c4) may move on its own
-    const GfxShaderRes *ur;
-    int nu = gfx_shader_resources(D->B.st.vs, GFX_RES_UBO, &ur), reads = 0;
-    for (int i = 0; i < nu; i++) reads |= ur[i].slot >= 3 && ur[i].slot <= 16 && ur[i].slot != 4;
-    if (!reads) return;
+    // per vertex shader, kept: whether it reads a user bank besides the camera's (c4), so may move on its own; its
+    // variant (the translation of the same code and answers) with the banks the position depends on; whether the
+    // filters below take it (pass); and the binding indices whose last-frame blocks it looks up (look, bit n: index n =
+    // bank n + 3). The memo comes first: most scene draws are not candidates, and the shader's resource list was read for
+    // each of them.
+    static struct { const GfxShader *of, *vs; uint32_t banks, look; uint8_t reads, pass; } vmemo[4096];
+    const GfxShader *of = D->B.st.vs;
+    uint32_t vi = (uint32_t)((uintptr_t)of * 0x9E3779B97F4A7C15ull >> 52);
+    if (vmemo[vi].of == of && !vmemo[vi].reads) return;
+    if (vmemo[vi].of != of) {
+        const GfxShaderRes *ur;
+        int nu = gfx_shader_resources(of, GFX_RES_UBO, &ur), reads = 0;
+        for (int i = 0; i < nu; i++) reads |= ur[i].slot >= 3 && ur[i].slot <= 16 && ur[i].slot != 4;
+        if (!reads) {
+            vmemo[vi].of = of, vmemo[vi].vs = NULL, vmemo[vi].banks = vmemo[vi].look = 0, vmemo[vi].reads = 0;
+            return;
+        }
+    }
     MO.cand++;
     uint64_t tp = t0 ? kern_now_ns() : 0;
     if (t0) MO.ns_part[0] += tp - t0, MO.n_part[0]++;
     uint64_t frame = __atomic_load_n(&gfx_counters.frames, __ATOMIC_RELAXED);
     if (MQ.frame != frame || MQ.fence != ex->fence || MQ.depth_fmt != z->format) mo_begin(ex, frame);
     if (!__atomic_load_n(&LIM.ubo_max, __ATOMIC_ACQUIRE)) limits_init();
-    // the variant: the translation of the same code and answers, kept per shader once found; it names the banks the
-    // position depends on (0: none, the shader is skipped from then on)
-    static struct { const GfxShader *of, *vs; uint32_t banks; } vmemo[1024];
-    uint32_t vi = (uint32_t)((uintptr_t)D->B.st.vs * 0x9E3779B97F4A7C15ull >> 54);
-    if (vmemo[vi].of != D->B.st.vs) {
+    if (vmemo[vi].of != of) {
         int has, pending = 0;
         sf_mvprev = 1;
         const GfxShader *v = shader_for(ex, NVN_STAGE_VS, &has, &pending, 0);
@@ -4027,36 +4052,31 @@ static void mvobj_draw_(VkExec *ex, const p_draw_idx *d, VkBuffer ib, VkDeviceSi
             return;
         }
         GfxShaderIo io[32];
-        uint32_t extra = gfx_shader_outputs(v, io) & ~gfx_shader_outputs(D->B.st.vs, io);
+        uint32_t extra = gfx_shader_outputs(v, io) & ~gfx_shader_outputs(of, io);
         uint32_t banks = extra ? gfx_shader_mvprev_banks(v) & 0x1fff8u : 0;
-        vmemo[vi].of = D->B.st.vs, vmemo[vi].vs = v, vmemo[vi].banks = banks;
-        vk_mvprev_want((banks & ~(1u << 4)) >> 3);   // binding index = bank - 3
+        // a position without the scene camera (c4) has a view of its own (c8 c9 c10 [c13]: its c8 is at a new address
+        // every frame, last frame's is never found): drawn again it would get this frame's view and no camera motion
+        // (TOTK_MV_CHECK while turning: 6.2 px end-point error against the camera vectors' 1.7)
+        static int noc4 = -1;
+        if (noc4 < 0) noc4 = rt_knob("MVOBJ_NOC4", "0");   // TOTK_MVOBJ_NOC4=1 (test): drawn again all the same
+        // only positions that read an object's own blocks: bones (c5), place (c7) or c6. The rest (terrain and grass:
+        // c14 c15 c16, with or without c9) measured no better than the camera's motion (TOTK_MV_CHECK, turning, those
+        // draws alone: object warp error 0.112 against the camera's 0.113, the object part 0.4 of what the picture
+        // shows) and were half the draws checked and listed. TOTK_MVOBJ_ALL=1 (test) takes them again.
+        static int all = -1;
+        if (all < 0) all = rt_knob("MVOBJ_ALL", "0");
+        int pass = banks & ~(1u << 4) && (banks >> 4 & 1 || noc4) && (all || banks & (1u << 5 | 1u << 6 | 1u << 7));
+        uint32_t look = pass ? (banks & ~(1u << 4) & ~mo_skip()) >> 3 : 0;   // binding index = bank - 3
+        vmemo[vi].of = of, vmemo[vi].vs = v, vmemo[vi].banks = banks, vmemo[vi].look = look;
+        vmemo[vi].reads = 1, vmemo[vi].pass = (uint8_t)pass;
+        vk_mvprev_want(look);
+    }
+    if (!vmemo[vi].pass) {
+        MO.no_out++;
+        return;
     }
     const GfxShader *vs = vmemo[vi].vs;
     uint32_t banks = vmemo[vi].banks;
-    if (!banks || !(banks & ~(1u << 4))) {
-        MO.no_out++;
-        return;
-    }
-    // a position without the scene camera (c4) has a view of its own (c8 c9 c10 [c13]: its c8 is at a new address every
-    // frame, last frame's is never found): drawn again it would get this frame's view and no camera motion
-    // (TOTK_MV_CHECK while turning: 6.2 px end-point error against the camera vectors' 1.7)
-    static int noc4 = -1;
-    if (noc4 < 0) noc4 = rt_knob("MVOBJ_NOC4", "0");   // TOTK_MVOBJ_NOC4=1 (test): drawn again all the same
-    if (!(banks >> 4 & 1) && !noc4) {
-        MO.no_out++;
-        return;
-    }
-    // only positions that read an object's own blocks: bones (c5), place (c7) or c6. The rest (terrain and grass: c14
-    // c15 c16, with or without c9) measured no better than the camera's motion (TOTK_MV_CHECK, turning, those draws
-    // alone: object warp error 0.112 against the camera's 0.113, the object part 0.4 of what the picture shows) and
-    // were half the draws checked and listed. TOTK_MVOBJ_ALL=1 (test) takes them again.
-    static int all = -1;
-    if (all < 0) all = rt_knob("MVOBJ_ALL", "0");
-    if (!all && !(banks & (1u << 5 | 1u << 6 | 1u << 7))) {
-        MO.no_out++;
-        return;
-    }
     // TOTK_MVOBJ_ONLY=<hex bank mask> (test): only draws whose position reads no bank outside the mask (bit n: cn)
     static long only = -2;
     if (only == -2) {
@@ -4238,6 +4258,9 @@ int vk_mvobj_execute(VkExec *ex, uint64_t cam, VkImageView mv, VkImageView depth
                               (unsigned long long)MO.lk[i][1], (unsigned long long)MO.lk[i][2],
                               (unsigned long long)MO.lk[i][3], (unsigned long long)MO.lk[i][4]);
         if (o) rt_log("vk_exec: per-object motion last-frame lookups (none/self/side/nearer/refused):%s", l);
+        if (MO.pv_cmp)
+            rt_log("vk_exec: per-object motion last-frame copies against the neighbour copies: %llu compared, %llu differ",
+                   (unsigned long long)MO.pv_cmp, (unsigned long long)MO.pv_diff);
     }
     if (frames % 60 == 0 && MO.ran)
         rt_log("vk_exec: per-object motion recorded a frame: %.0f draws, %.0f pipeline binds, %.0f dynamic states, %.0f "
@@ -4402,6 +4425,7 @@ static void op_draw_idx(VkExec *ex, const p_draw_idx *d) {
         return warn_once(W_INDEX, "index buffer %#llx is not aligned to its index size: draw skipped", (unsigned long long)d->ibuf);
     } else {
         VK_MEM_USE(sp);
+        VK_AHEAD_READ(sp, d->ibuf, bytes, VK_MUSE_IB);
         vkCmdBindIndexBuffer(ex->cb, sp.buffer, sp.offset, d->itype == NVN_INDEX_TYPE_UNSIGNED_SHORT ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
         ex->recorded++;
         vk_mem_count(sp.cls, VK_MUSE_IB, bytes);
@@ -4430,6 +4454,8 @@ static void op_draw_idx_ind(VkExec *ex, const p_draw_idx_ind *d) {
     ex->fr.draws++;
     VK_MEM_USE(ip);
     VK_MEM_USE(ib);
+    VK_AHEAD_READ(ip, d->ind, sizeof(VkDrawIndexedIndirectCommand), VK_MUSE_IND);
+    VK_AHEAD_READ(ib, d->ibuf, ib.avail < 0x10000 ? ib.avail : 0x10000, VK_MUSE_IB);   // the count is the GPU's: 64 KiB
     vkCmdBindIndexBuffer(ex->cb, ib.buffer, ib.offset, d->itype == NVN_INDEX_TYPE_UNSIGNED_SHORT ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
     vkCmdDrawIndexedIndirect(ex->cb, ip.buffer, ip.offset, 1, sizeof(VkDrawIndexedIndirectCommand));
     ex->recorded += 2;
@@ -4484,6 +4510,7 @@ static void op_dispatch_ind(VkExec *ex, const p_dispatch_ind *d) {
     if (!p || !info) return warn_once(W_PIPELINE, "a compute pipeline could not be created: dispatches with it are skipped");
     vk_exec_barrier(ex);
     VK_MEM_USE(ip);
+    VK_AHEAD_READ(ip, d->ind, sizeof(VkDispatchIndirectCommand), VK_MUSE_IND);
     bind_pipeline(ex, VK_PIPELINE_BIND_POINT_COMPUTE, p);
     D->c0_dim[0] = D->c0_dim[1] = D->c0_dim[2] = 0;
     D->B.c0_valid[2] = 0;   // a fresh c0 range: the copy below must not change one an earlier dispatch reads
@@ -4739,6 +4766,7 @@ static void op_update_ub(VkExec *ex, const p_update_ub *u) {
             uint8_t *d = scratch(ex, u->size, &b, &o);
             MX_CPY(d, u->data, u->size);
             VK_MEM_PICK(sp);
+            VK_AHEAD_READ(sp, u->dst, u->size, VK_MUSE_GPU_WRITE);
             ov_add(u->dst, u->dst + u->size, b, o, &sp);
             vk_mem_gpu_wrote(&sp, u->size);
             vk_usnap_drop(u->dst, u->size);
@@ -4756,6 +4784,7 @@ static void op_update_ub(VkExec *ex, const p_update_ub *u) {
     vk_exec_barrier(ex);   // earlier draws finished with the old contents; overlaid updates' copies go first
     MX_CPY(scratch(ex, u->size, &b, &o), u->data, u->size);
     VK_MEM_PICK(sp);
+    VK_AHEAD_READ(sp, u->dst, u->size, VK_MUSE_GPU_WRITE);
     VkBufferCopy cp = {o, sp.offset, u->size};
     vkCmdCopyBuffer(ex->cb, b, sp.buffer, 1, &cp);
     vk_mem_gpu_wrote(&sp, u->size);

@@ -20,6 +20,11 @@
 # Frame queue: the game starts a frame while the previous one waits for its display time, so a frame that runs long
 # still makes its turn. Far fewer dropped frames at the limit for up to one frame more input delay. Takes effect at once.
 # frame_queue = 0
+# Frame generation: off, or fsr3 (AMD FSR 3 frame interpolation). A generated picture goes on screen between each two
+# the game draws: twice the pictures, the game at half of fps_limit (the limit counts the pictures shown), the controls
+# about half a frame later. For displays of 120 Hz and more; off with DLSS, FSR 3.1 (scene_upscaler) or HDR, and in
+# menus and fades. Applies at once.
+# frame_gen = off
 # Real-time frame step: game speed follows the clock instead of the frame count.
 # realtime = 1
 # Cloth simulation on the real-time clock. Needs realtime = 1.
@@ -36,6 +41,9 @@
 # Game 1.4.3: the two launchers in Tenbez Shrine throw the stone ball into the other launcher's seat above 30 fps.
 # 0 = the game's own speed, tuned for 30 fps.
 # shutter_fix = 1
+# Games 1.2.1 and 1.4.3: above 30 fps a thunderstorm has the lightning of 30 fps, instead of more distant bolts and
+# lightning flashes the higher the frame rate. 0 = the game's own chances per frame, tuned for 30 fps.
+# lightning_fix = 1
 
 [performance]
 # The keys of this section and of [diagnostics] are for testing and troubleshooting, and take effect at the next start.
@@ -65,11 +73,14 @@
 # game waits once for the GPU to finish the frame it presented last; with 1 that wait covers the frame before it
 # instead. On Great Sky Island (Linux, RX 9070 XT) with shadow_defer = 1 this took about 73 to 100 fps. Costs one more
 # frame of input delay, and frame times vary more from frame to frame than with 0. GPU results the game reads back every frame after that wait, for example its depth queries, can be a frame old; a result it reads only once is waited for.
-# Works on 1.1.0, 1.2.1 and 1.4.3. Needs shadow storage (shadow below), which is on by default on Linux and
-# Wine and needs shadow = 1 on native Windows; without it the setting is ignored and the log says so.
+# Works on 1.1.0, 1.2.1 and 1.4.3. With shadow storage (shadow below; on by default on Linux and Wine) the GPU
+# reads copies of the game's memory; without it, on a discrete GPU (memory = mirror or auto), the GPU reads the
+# game's memory in place and guards copy or wait for what the game rewrites while the GPU still reads it (no shadow
+# copies, about 1 ms a frame less on a weak CPU). With memory = import and no shadow storage the setting is ignored
+# and the log says so.
 # sync_ahead = 0
 # Shadow storage, 0 or 1: each CPU-visible memory pool of the game gets a host-visible copy that the GPU reads, in
-# place of importing the game's memory. Default: on under Linux and Wine, off on native Windows. sync_ahead needs it.
+# place of importing the game's memory. Default: on under Linux and Wine, off on native Windows.
 # Costs about 0.2 ms a frame and doubles the memory of those pools (about 1.1 GB; docs/building.md). Read at start.
 # shadow = 0
 # With sync_ahead = 1: when the game changes memory the GPU still reads, queue the copy into the GPU's shadow of that
@@ -227,7 +238,7 @@
 # Dynamic resolution: 1 lets the game lower the scene to 90 or 80 % of that size, 0 keeps it at 100 %. The game decides
 # by a cost estimate made for the Switch, which grows with the scene's width and ignores how fast your GPU is: a
 # scene wider than about 3000 pixels can drop to 80 % on any GPU. 1 is the default. 1.1.0, 1.2.1 and 1.4.3. Changes in
-# the menu take effect at once.
+# the menu take effect at once. While FSR 3.1 upscales the scene (scene_upscaler = fsr3) it stays at 100 %.
 # dynamic_res = 1
 # Scaling to the window when it is larger than the game resolution: fsr (AMD FSR 1) or bilinear, and FSR's sharpening
 # from 0 (off) to 100. Changes while the game runs take effect at once.
@@ -290,16 +301,27 @@
 # shaders (translator patches 0010 and 0017), so the shader cache is rebuilt once after an update. Read at start.
 # pcss = 0
 
-# NVIDIA DLSS / DLAA for the 3D scene, on NVIDIA RTX GPUs with the DLSS model from NVIDIA's DLSS SDK next to the
-# executable (Windows: nvngx_dlss.dll next to totk.exe; Linux: libnvidia-ngx-dlss.so.<version> next to totk, with the
-# NVIDIA driver's libnvidia-ngx.so.1 installed); elsewhere the setting does nothing. The HUD is drawn after it and is not touched.
-# Read at start.
+# The temporal upscaler for the 3D scene: off (the game's own scaling and FXAA), dlss (NVIDIA DLSS, on NVIDIA RTX GPUs
+# with the DLSS model from NVIDIA's DLSS SDK next to the executable: Windows nvngx_dlss.dll next to totk.exe; Linux
+# libnvidia-ngx-dlss.so.<version> next to totk, with the NVIDIA driver's libnvidia-ngx.so.1 installed) or fsr3 (AMD FSR
+# 3.1 from AMD's FidelityFX SDK, on any GPU). FSR 3.1 below native (dlss = quality and down) pays where the GPU limits
+# the frame rate: integrated GPUs, weak cards, 4K output; where the CPU limits it, its own GPU and CPU time make the game
+# slower. An engine that cannot run here leaves the game's own scaling in place. The HUD is drawn after it, at the
+# output size, and is not touched. The present's upscaler and sharpness below still scale the game image to the window.
+# Frame generation stays off with fsr3. Read at start. Without this line, dlaa = 1 (the older switch) means dlss.
+# scene_upscaler = off
+# The older DLSS switch, read only when scene_upscaler is not set: 1 is scene_upscaler = dlss.
 # dlaa = 0
-# What DLSS works from: dlaa (the 3D scene at full size), quality, balanced, performance or ultra_performance (the
-# scene at 67, 58, 50 or 33 % of the output, scaled up by DLSS; these replace render_scale and sharpen texture filtering
-# to match). They apply only with dlaa = 1 and the DLSS model next to the executable; otherwise the scene follows
-# render_scale. Changes while the game runs take effect at once (1.4.3; 1.2.1 at the next start).
+# The upscaling mode of the scene upscaler, DLSS or FSR 3.1: dlaa (native: the 3D scene at full size, anti-aliased
+# only), quality, balanced, performance or ultra_performance (the scene at 67, 58, 50 or 33 % of the output, scaled up by
+# the upscaler; these replace render_scale and sharpen texture filtering to match). They apply only while a scene
+# upscaler runs; otherwise the scene follows render_scale. Changes while the game runs take effect at once (1.4.3; 1.2.1
+# at the next start).
 # dlss = dlaa
+# FSR 3.1's own sharpening of the 3D scene, from 0 (off) to 100. The game's sharpening is part of its FXAA, which FSR
+# 3.1 replaces, so at 0 FSR's picture is softer than the game's own. Only with scene_upscaler = fsr3. Changes while the
+# game runs take effect at once.
+# fsr_sharpness = 80
 # The DLSS model: default (NVIDIA's advice per mode: K for dlaa, quality and balanced, M for performance, L for
 # ultra_performance), k (K in every mode) or j (the other transformer model: slightly less ghosting behind moving
 # characters, a little more flicker). Any other model by its letter, a to m: on slower RTX cards the older model e is
