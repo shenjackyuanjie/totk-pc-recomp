@@ -146,8 +146,9 @@ def main():
         ('main', 0x7000000000, 0x472d000), ('subsdk0', 0x7004800000, 0x400000),
         ('sdk', 0x7004c00000, 0x800000)]
     table = patches.load(ROOT / 'recomp' / 'patches-v110.txt', mods)
-    assert table.sets[-1] == ('freecam', 'TOTK_FREECAM_PATCH', 0)
-    assert len(table.sets) == 17 and sum(map(len, table.sites.values())) == 56
+    # The set keeps the index it was added with: a later set (the 1.1.0 lightning port) may follow it.
+    assert table.sets[16] == ('freecam', 'TOTK_FREECAM_PATCH', 0)
+    assert len(table.sets) == 18 and sum(map(len, table.sites.values())) == 59
     assert sum(map(len, table.spins.values())) == 889
     branch = table.for_module('main', mods[0][1])[mods[0][1] + SITE][0][1][0]
     call = Lifter(mods[0][1], 'c').lift(branch, mods[0][1] + SITE)
