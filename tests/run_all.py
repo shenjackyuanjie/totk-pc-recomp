@@ -45,17 +45,21 @@ def interp(venv):
 
 # name: (venv, needs, args, why the need is there)
 #   venv: .venv | .venv-py314 | system (the standalone base interpreter)
-#   needs: None | needs joined by '+' (exefs | exe | romfs | embed | gui | cc)
+#   needs: None | needs joined by '+' (exefs | exe | romfs | embed | gui | cc | ninja)
 #   name: the script below tests/, without .py (diff/simd is tests/diff/simd.py)
 TESTS = {
     # ---- no game files, no build ----
     'flags_check':              ('.venv', 'cc', [], 'compiles the CPU flag helpers with clang'),
     'excl_mt':                  ('.venv', 'cc', [], 'compiles the threaded exclusive-monitor harness with clang'),
     'check_isa_test':           ('.venv', None, [], ''),
+    'build_command_test':       ('.venv', 'ninja', [], 'checks command arguments through Ninja'),
     'compile_budget_test':      ('.venv', None, [], ''),
+    'extract_skip_base_romfs_test': ('.venv-py314', None, [], ''),
+    'perf_summary_test':        ('.venv', None, [], ''),
     'pack_shader_cache_test':   ('.venv', None, [], ''),
     'spin_waits_test':          ('.venv', None, [], ''),
     'worktree_test':            ('.venv', None, [], ''),
+    'run_game_test':            ('.venv', None, [], ''),
     'installer_test':           ('.venv-py314', None, [], ''),
     'ncz_test':                 ('.venv-py314', None, [], ''),
     'romfs_prompts_test':       ('.venv-py314', None, [], ''),
@@ -64,6 +68,7 @@ TESTS = {
     'exefs_patches_test':       ('.venv', None, [], ''),
     'exefs_plugins_test':       ('.venv', None, [], ''),
     'lift_cache_test':          ('.venv', None, [], ''),
+    'ab_summary_test':          ('.venv', None, [], ''),
     'settings_doc_check':       ('.venv', None, [], ''),
     'mouse_direct_check':       ('.venv', 'cc', ['--cc', '<cc>'], 'compiles its checks with clang'),
     'cheats_vm_check':          ('.venv', 'cc', ['--cc', '<cc>'], 'compiles runtime/cheats.c into a harness with clang'),
@@ -186,6 +191,12 @@ def resolve(needs):
             p = find_cc()
             if p is None: missing.append('no clang (MSYS2 UCRT64 on Windows)')
             else: vals['<cc>'] = str(p)
+        elif need == 'ninja':
+            p = MSYS_BIN / 'ninja.exe'
+            if not (WIN and p.is_file()):
+                found = shutil.which('ninja')
+                p = Path(found) if found else None
+            if p is None: missing.append('no Ninja on PATH or in MSYS2 UCRT64')
         elif need == 'gui':
             missing.append('drives a window; run it by hand on a desktop session')
         else:

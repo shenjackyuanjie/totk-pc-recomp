@@ -85,7 +85,7 @@ def native_check(work, table, source=None, cflags='-march=x86-64-v3'):
     words = {SITE - 4: 0xf81f0ffe, SITE: 0xf9400e68, SITE + 4: 0xf84107fe, SITE + 8: 0xd65f03c0}
     lift = Lifter(base, 'c')
     mod = SimpleNamespace(lifter=lift, hi=base + SITE + 12,
-                          lift=lambda a: lift.lift(words[a - base], a))
+                          lift=lambda a: lift.lift(words[a - base], a), plugin=False)
     emitted, refs = Emitter(mod, {base + SITE - 4}, table.for_module('main', base), hooks=set()).function(
         base + SITE - 4, base + SITE + 12)
     assert not refs
