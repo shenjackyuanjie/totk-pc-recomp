@@ -10,6 +10,9 @@ typedef enum {
     UI_SWKBD_OK,
     UI_SWKBD_CANCEL,
     UI_SWKBD_PAD_HINT,       // how a controller answers
+    UI_SWKBD_SDL_KEYS_HINT,  // the SDL window's key line; English only: its debug font draws ASCII (swkbd_sdl.c)
+    UI_SWKBD_SDL_PAD_HINT1,  // the SDL window's controller lines, the letter grid's buttons
+    UI_SWKBD_SDL_PAD_HINT2,
 
     // Menu: window, tabs, bottom row. UI_MENU_FIRST..UI_MENU_LAST_ID carry English, Russian, Brazilian Portuguese,
     // Simplified Chinese, German, French, Spanish, Italian, Dutch, Japanese, Korean and Vietnamese texts.
@@ -42,6 +45,7 @@ typedef enum {
     UI_MENU_ASPECT, UI_MENU_ASPECT_DESC, UI_MENU_ASPECT_FIT, UI_MENU_ASPECT_STRETCH,
     UI_MENU_MOVIE_ASPECT, UI_MENU_MOVIE_ASPECT_DESC, UI_MENU_MOVIE_ASPECT_KEEP, UI_MENU_MOVIE_ASPECT_STRETCH,
     UI_MENU_FOV, UI_MENU_FOV_DESC,
+    UI_MENU_VERT_PLUS, UI_MENU_VERT_PLUS_DESC,
     UI_MENU_SHADOW_RES, UI_MENU_SHADOW_RES_DESC, UI_MENU_SHADOW_RES_GAME,
     UI_MENU_ANISO, UI_MENU_ANISO_DESC, UI_MENU_ANISO_GAME,
     UI_MENU_LOD_STEADY, UI_MENU_LOD_STEADY_DESC,

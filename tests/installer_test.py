@@ -370,6 +370,45 @@ class LiftKeyTest(unittest.TestCase):
         self.assertEqual(self.key(), before)
 
 
+class PluginsStaleTest(unittest.TestCase):
+    """A plugin the game found stale (build-cache/plugins.stale, runtime/mods.c mods_plugin_off) plans the lift and the
+    compile of the game's rebuild: the plugin's service run is in the lift, and only Lift.run clears the file."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        base = Path(tmp.name)
+        dest, temp = base / 'install', base / 'temp'
+        (temp / 'gen').mkdir(parents=True)
+        (temp / 'gen' / 'layout.json').write_text('[]')
+        (temp / 'gen' / steps.STAMP).write_text('L\n')
+        (dest / 'build-cache').mkdir(parents=True)
+        (dest / ('totk' + steps.EXE)).write_bytes(b'MZ')
+        (dest / 'romfs-index.bin').write_bytes(b'')
+        layout = SimpleNamespace(release='1.0', dlls=[])
+        records = {'lift': {'key': 'L'}, 'compile': {'key': 'C', 'exe_sha256': steps.file_sha256(dest / ('totk' + steps.EXE))}}
+        self.ctx = runner.Context(layout, dest, temp, Reporter(out=io.StringIO()), SimpleNamespace(),
+                                  state={'release': '1.0', 'steps': records})
+        self.addCleanup(self.ctx.reporter.close)
+        self.ctx.steps = [steps.Lift(), steps.Compile()]
+        self.ctx.keys = {'lift': 'L', 'compile': 'C'}
+        self.stale = dest / 'build-cache' / 'plugins.stale'
+
+    def planned(self):
+        self.ctx.plan()
+        return [s.id for s in self.ctx.steps if self.ctx.will_run(s.id)]
+
+    def test_stale_plugin_runs_the_lift_and_the_compile(self):
+        self.assertEqual(self.planned(), [])
+        self.stale.write_text('A89F6A7C\t74492AD5\tits init wrote 1 words the build did not record '
+                              '(first main+0x3ad6eb8 87a00000 -> 823c0000)\n')
+        self.assertEqual(self.planned(), ['lift', 'compile'])
+
+    def test_empty_stale_file_keeps_the_build(self):
+        self.stale.write_text('')
+        self.assertEqual(self.planned(), [])
+
+
 class LiftRunTest(unittest.TestCase):
     """Lift.run with fake tools: the ExeFS patch stage writes the status and data files, the lift lists the bytes it
     read, and the data writes are checked against that list after it; a failed lift or check drops both files."""
@@ -998,6 +1037,59 @@ class FreeSpaceTest(unittest.TestCase):
         usage.assert_called_once_with(root)
 
 
+class MissingLibraryTest(unittest.TestCase):
+    """#1428, #1315, #1419: a system library the release's libSDL3.so.0 links is missing; the setup names it (and the
+    package that provides it) before the lift, and after a game start the loader stopped, instead of exit code 127."""
+
+    LDD = ('\tlinux-vdso.so.1 (0x00007ffd)\n\tlibXss.so.1 => not found\n'
+           '\tlibX11.so.6 => /usr/lib64/libX11.so.6 (0x00007f00)\n\tlibdecor-0.so.0 => not found\n')
+
+    def test_packages_of_known_libraries(self):
+        self.assertEqual(steps.library_packages(['libXss.so.1']),
+                         ' (Fedora: libXScrnSaver, Debian/Ubuntu: libxss1, Arch: libxss)')
+        self.assertEqual(steps.library_packages(['libXss.so.1', 'libfoo.so.9', 'libdecor-0.so.0']),
+                         ' (Fedora: libXScrnSaver libdecor, Debian/Ubuntu: libxss1 libdecor-0-0, '
+                         'Arch: libxss libdecor)')
+        self.assertEqual(steps.library_packages(['libfoo.so.9']), '')
+
+    def test_ldd_not_found_lines(self):
+        runs = []
+
+        def ldd(cmd, **kw):
+            runs.append(cmd)
+            return SimpleNamespace(returncode=1, stdout=self.LDD, stderr='')
+        with mock.patch.object(steps.sys, 'platform', 'linux'), mock.patch.object(steps.subprocess, 'run', ldd):
+            self.assertEqual(steps.missing_libraries([Path('a/libSDL3.so.0'), Path('b/libother.so')]),
+                             ['libXss.so.1', 'libdecor-0.so.0'])
+        self.assertEqual([c[0] for c in runs], ['ldd', 'ldd'])
+
+    def test_no_ldd_or_not_linux(self):
+        def missing(cmd, **kw):
+            raise FileNotFoundError('ldd')
+        with mock.patch.object(steps.sys, 'platform', 'linux'), mock.patch.object(steps.subprocess, 'run', missing):
+            self.assertEqual(steps.missing_libraries([Path('libSDL3.so.0')]), [])
+        with mock.patch.object(steps.sys, 'platform', 'win32'):
+            self.assertEqual(steps.missing_libraries([Path('SDL3.dll')]), [])
+
+    def test_loader_error_in_the_prepare_log(self):
+        with tempfile.TemporaryDirectory() as d:
+            log = Path(d) / 'prepare-prepare_shaders.log'
+            log.write_text('/home/p/TotK/totk: error while loading shared libraries: libXss.so.1: cannot open shared '
+                           'object file: No such file or directory\ntotk.exe --prepare-shaders: rc=127\n'
+                           '/home/p/TotK/totk: error while loading shared libraries: libXss.so.1: cannot open shared '
+                           'object file: No such file or directory\n', encoding='utf-8')
+            self.assertEqual(steps.loader_missing(log), ['libXss.so.1'])
+            self.assertEqual(steps.loader_missing(Path(d) / 'none.log'), [])
+
+    def test_messages_take_the_parameters(self):
+        for path in (ROOT / 'installer' / 'text').glob('*.json'):
+            catalog = json.loads(path.read_text(encoding='utf-8'))
+            for id in ('check.libraries_missing', 'prepare.libraries_missing'):
+                text = catalog[id].format(libraries='libXss.so.1', packages=' (Fedora: libXScrnSaver)', log='x.log')
+                self.assertIn('libXss.so.1', text, (path.name, id))
+                self.assertIn('libXScrnSaver', text, (path.name, id))
+
+
 class BaseGameCheckTest(unittest.TestCase):
     """Issue #261: an update NSP chosen as the base game was reported as "not Tears of the Kingdom"."""
     BASE, UPDATE = '0100F2C0115B6000', '0100F2C0115B6800'
@@ -1051,8 +1143,11 @@ class ShapesTest(unittest.TestCase):
 
     def test_shape_rule(self):
         self.assertEqual([screens.shape_size(*s) for s in ((5120, 2160), (3440, 1440), (1920, 800), (2560, 1600),
-                                                           (1920, 1080), (1024, 768))],
-                         ['2560x1080', '3440x1440', '3840x1600', '1280x800', None, None])
+                                                           (1920, 1080), (1024, 768), (3120, 1440), (2560, 1200),
+                                                           (1280, 1024), (1080, 1920), (7680, 1440), (7680, 2160))],
+                         ['2560x1080', '3440x1440', '3840x1600', '1280x800', None, '1440x1080', '2340x1080',
+                          '2560x1200', None, None, None, '3840x1080'])
+        self.assertIsNone(screens.shape_size(2560, 1200, listed=True))   # a display of an unlisted shape
         self.assertEqual(screens.default_size(3440, 1440), '2560x1080')   # runtime/cfg.c screen_default
         self.assertEqual(screens.default_size(1280, 800), '1280x800')
 
@@ -1085,6 +1180,10 @@ class ShapesTest(unittest.TestCase):
         self.assertEqual(screens.wanted(self.dest, [(3440, 1440), (1920, 1080), (800, 1280)]),
                          (['2560x1080', '3440x1440', '1280x800', '1920x1280'], 'pc'))
         self.assertEqual(screens.wanted(self.dest / 'none', [(2560, 1440)]), ([], None))
+
+    def test_wanted_unlisted_output_res_gets_its_own_size(self):
+        (self.dest / 'totk.ini').write_text('output_res = 2560x1200\n')
+        self.assertEqual(screens.wanted(self.dest, [(2560, 1200), (1600, 1200)]), (['1440x1080', '2560x1200'], None))
 
     def test_layout_settings_keep_the_last_nonempty_value(self):
         for empty in ('', '   ', '""'):
