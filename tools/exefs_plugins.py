@@ -10,9 +10,9 @@ addresses). The record says what the build expects that start-up to write.
                                 --patches-out <patch file> --status <file>   # and the patch lines for the generator
 
 With --mods, --patches, --patches-out and --status, an accepted plugin becomes one `ordered` patch set mod_<hash>
-(recomp/patches.py: a plugin line, its expected writes, stubs, seeds, orig lines and its hook sites) appended to the
---patches file into --patches-out, and every plugin gets a line of --status (runtime/mods.c reads it as
-build-cache/plugins.status), in the format of tools/exefs_patches.py --status:
+(recomp/patches.py: a plugin line, its expected writes, stubs, seeds, orig lines, its hook sites and code words)
+appended to the --patches file into --patches-out, and every plugin gets a line of --status (runtime/mods.c reads it
+as build-cache/plugins.status), in the format of tools/exefs_patches.py --status:
 
   <file hash> <content hash> <kind> <built-in sets> <note>
 
@@ -36,7 +36,12 @@ The check (check_record) accepts a record only when every rule holds; each broke
     fallback, ends the run with the reason);
   - the init called only the svcs ALLOWED_SVCS, GetInfo with ALLOWED_INFO, and the imports ALLOWED_IMPORTS or the
     game's (--exefs: what the game's main imports, game_imports);
-  - every write into a game module is a word of main's .text whose original is no br, blr or ret, and it is one of:
+  - every write into a game module is a word of main's .text (or of its .data and .bss, below). A word of main's
+    .text is new code there: what the init wrote is what runs while the plugin is on. One of exlaunch's one-word hook
+    shapes, over an original that is no br or ret, keeps its own patch site (one test per executed site); any other
+    word is a `code` hook (recomp/patches.py `code`: the function holding it is lifted a second time with the words
+    in place, and rt_patch_on of the set picks the copy at the function's entry), whose branches code_flow follows
+    (SageWheel's `adrp x17; add x17, x17, #lo; br x17` far jumps into its functions). The one-word shapes are:
     - an inline hook (MSFix, Full Inventory Expansion): `b <stub>` into a plugin's .text, the stub in exlaunch's
       shape (stur x30, [sp, #-0x10]; bl one of exlaunch's hook impls, HOOK_IMPLS; ldur x30, [sp, #-0x10];
       b <trampoline>; .quad <callback in the plugin's .text>), the trampoline the site's original relocated (the
@@ -47,6 +52,11 @@ The check (check_record) accepts a record only when every rule holds; each broke
     - a replace hook (Full Inventory Expansion's Sort Fixer): `b` from a function start of main to a function start of
       the plugin's lift; the Orig trampoline (the original relocated, back to site+4) is listed when the pool holds
       one.
+    A `code` hook's branches (b, bl, b.cond, cbz, tbz, and a br or blr whose register the words before it make a
+    constant) lead to main, whose targets become function starts (`entry`), or into the plugin's .text, whose
+    targets become seeds; a main address the init stored in its own data just after the new code is its way back and
+    an entry too. Refused: a branch anywhere else or into an inline-hook stub, an svc outside REACH_SVCS, a literal
+    load from words the init wrote (main keeps the game's bytes at play).
   - the code the hooks reach (the stubs, exlaunch's hook impls, the callbacks, the replace and call targets, and what
     they reach by direct branches and calls, reach()) makes only the svcs REACH_SVCS and calls only the imports
     REACH_IMPORTS or the game's. An indirect call (blr) is not followed: what it reaches cannot be known before the run.
@@ -68,6 +78,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from cheats import fnv  # noqa: E402
 from exefs_patches import EXEFS_PLACES, builtin_sites  # noqa: E402
 from nso import R_AARCH64_JUMP_SLOT, Nso  # noqa: E402
+import patches  # noqa: E402
 
 ALLOWED_SVCS = {0x01: 'SetHeapSize', 0x06: 'QueryMemory', 0x1E: 'GetSystemTick', 0x27: 'OutputDebugString',
                 0x29: 'GetInfo', 0x74: 'MapProcessMemory', 0x75: 'UnmapProcessMemory'}
@@ -99,7 +110,19 @@ HOST_FS = {'_ZN2nn2fs11MountSdCardEPKc', '_ZN2nn2fs8OpenFileEPNS0_10FileHandleEP
            '_ZN2nn2fs13ReadDirectoryEPlPNS0_14DirectoryEntryENS0_15DirectoryHandleEl',
            '_ZN2nn2fs14CloseDirectoryENS0_15DirectoryHandleE', '_ZN2nn2fs12GetEntryTypeEPNS0_18DirectoryEntryTypeEPKc',
            '_ZN2nn2fs8ReadFileEPmNS0_10FileHandleElPvmRKNS0_10ReadOptionE', '_ZN2nn2fs10RenameFileEPKcS2_',
-           '_ZN2nn2fs26DeleteDirectoryRecursivelyEPKc', '_ZN2nn2fs6CommitEPKc', '_ZN2nn2fs7UnmountEPKc'}
+           '_ZN2nn2fs26DeleteDirectoryRecursivelyEPKc', '_ZN2nn2fs6CommitEPKc', '_ZN2nn2fs7UnmountEPKc',
+           '_ZN2nn2fs22GetDirectoryEntryCountEPlNS0_15DirectoryHandleE', '_ZN2nn2fs15DeleteDirectoryEPKc',
+           '_ZN2nn2fs25CleanDirectoryRecursivelyEPKc', '_ZN2nn2fs15RenameDirectoryEPKcS2_', '_ZN2nn2fs10CreateFileEPKcli',
+           '_ZN2nn2fs8ReadFileENS0_10FileHandleElPvmRKNS0_10ReadOptionE', '_ZN2nn2fs14ReadFileAtOnceEPKcPvm',
+           '_ZN2nn2fs24CreateAndWriteFileAtOnceEPKcPKvm', '_ZN2nn2fs15GetFileOpenModeENS0_10FileHandleE',
+           '_ZN2nn2fs10QueryRangeEPNS0_14QueryRangeInfoENS0_10FileHandleEll',
+           '_ZN2nn2fs24GetFileTimeStampForDebugEPNS0_13FileTimeStampEPKc',
+           '_ZN2nn2fs27GetFileTimeStampRawForDebugEPNS0_16FileTimeStampRawEPKc', '_ZN2nn2fs16GetFreeSpaceSizeEPlPKc',
+           '_ZN2nn2fs17GetTotalSpaceSizeEPlPKc', '_ZN2nn2fs9IsMountedEPKc', '_ZN2nn2fs13IsPathMountedEPKc',
+           '_ZN2nn2fs14CommitSaveDataEPKc', '_ZN2nn2fs17MountCacheStorageEPKc', '_ZN2nn2fs17MountCacheStorageEPKci',
+           '_ZN2nn2fs18IsSaveDataExistingERKNS_7account3UidE', '_ZN2nn2fs18IsSaveDataExistingEPbRKNS_7account3UidE',
+           '_ZN2nn2fs8MountRomEPKc', '_ZN2nn2fs8MountRomEPKcPvm', '_ZN2nn2fs22QueryMountRomCacheSizeEPm',
+           '_ZN2nn2fs21MountTemporaryStorageEPKc', '_ZN2nn2fs8ReadFileENS0_10FileHandleElPvm'}
 LANGUAGE = {'_ZN2nn2oe18GetDesiredLanguageEv', '_ZN2nn8settings6detail15GetLanguageCodeEPNS0_12LanguageCodeE'}
 # The imports the code the hooks reach may call while the game runs (reach()). Each reviewed for what it touches: the
 # libc ones above (the caller's buffers and the game's heap), SNPrintf (the caller's buffer), the sdk's mutexes and
@@ -130,6 +153,14 @@ MID_CALL = re.compile(r'no function at guest pc 0x[0-9a-f]+ \(main\+0x([0-9a-f]+
 
 def u(v):
     return int(v, 16) if isinstance(v, str) else v
+
+
+def header_site(h):
+    """The hook sits on main's module header, not on code. exlaunch adds a table offset to main's base, and a game
+    update the plugin's table lacks gives offset 0 (Challenge Mode's Enemy Health Regeneration names 1.0.0 to 1.4.1).
+    Nothing runs there, on the Switch either: the write is kept and checked, and the lift gets no site for it (its
+    first word, 1, decodes as a trap the generator refuses to patch)."""
+    return h['site'] == 'main+0x0'
 
 
 def ran_view(rec):
@@ -198,6 +229,8 @@ def relocated(orig, site, word, at):
 # hook's site calls the stub and runs main's own original after it, recomp/patches.py @call; a replace hook's Orig
 # reaches an unpatched copy of the function, `orig`), so these forms only tell an exlaunch hook from other code.
 NOP = 0xD503201F
+YIELD = 0xD503203F
+SPIN_WIN = 512           # bytes from a spin wait's back-edge back to its head (tools/spin_waits.py SPIN_WIN)
 LDR_X17_8 = 0x58000051   # ldr x17, #8
 LDR_X17_12 = 0x58000071  # ldr x17, #12
 ADR_X30_16 = 0x1000009E  # adr x30, #16
@@ -393,14 +426,13 @@ def check_record(rec, impls, game=frozenset()):
         site = main['base'] + w['offset']
         stub = branch_target(w['new'], site)
         link = bool(w['new'] >> 31)
-        if stub is None:
-            reasons.append(f'{where}: the new word {w["new"]:#010x} is no b or bl')
-            continue
-        if w['old'] & 0xFFFFFC1F in (0xD61F0000, 0xD65F0000):   # br, ret: the site would end its function
-            reasons.append(f'{where}: the original {w["old"]:#010x} is a br or ret')
-        p, _ = plugin_word(stub)
-        if p is None:
-            reasons.append(f"{where}: {'bl' if link else 'b'} {stub:#x} does not reach into a plugin's .text")
+        p, _ = plugin_word(stub) if stub is not None else (None, None)
+        if stub is None or p is None or w['old'] & 0xFFFFFC1F in (0xD61F0000, 0xD65F0000):
+            # Not one of exlaunch's one-word hook shapes below (a word that is no b or bl into the plugin, or one over
+            # a br or ret, which would end the per-site alternative): new code in main, lifted in a copy of the
+            # function that holds it (recomp/patches.py `code`); code_flow checks where it leads.
+            hooks.append({'site': f'main+{w["offset"]:#x}', 'original': f'{w["old"]:#010x}', 'kind': 'code',
+                          'new': f'{w["new"]:#010x}'})
             continue
         exl = inline_stub(rec['images'][p['name']], stub - p['base'], p)
         if link and exl:   # an inline stub is entered by b: it saves x30 itself
@@ -451,14 +483,128 @@ def check_record(rec, impls, game=frozenset()):
             reasons.append(f'{where}: the trampoline\'s word after the relocated original, '
                            f'{back if back is not None else 0:#010x} at {tp["name"]}+{end - tp["base"]:#x}, is no b '
                            f'to the site + 4')
+    reasons += code_flow(rec, hooks)
     return hooks, reasons
+
+
+def code_runs(hooks):
+    """The `code` hooks' words of main as runs of consecutive words: [[(main offset, word), ...]], by offset."""
+    words = sorted((int(h['site'].split('+')[1], 16), u(h['new'])) for h in hooks if h['kind'] == 'code')
+    runs = []
+    for o, w in words:
+        if runs and runs[-1][-1][0] + 4 == o:
+            runs[-1].append((o, w))
+        else:
+            runs.append([(o, w)])
+    return runs
+
+
+def plugin_pointers(rec, p):
+    """Values the init stored into plugin p's .data and .bss: its 8-byte words that differ from the image before the
+    init (every word when the run kept no such image)."""
+    img, pre = rec['images'].get(p['name']), rec.get('pre_images', {}).get(p['name'])
+    if img is None:
+        return set()
+    out = set()
+    for o in range(p['text_end'] + -p['text_end'] % 8, len(img) - 7, 8):
+        if pre is None or img[o:o + 8] != pre[o:o + 8]:
+            out.add(struct.unpack_from('<Q', img, o)[0])
+    return out
+
+
+BACK_WINDOW = 32   # bytes after a run of new code within which a main address the init stored is its way back
+
+
+def code_flow(rec, hooks):
+    """Reasons the `code` hooks (new code the init wrote into main's .text) cannot be lifted, and each such hook
+    annotated with where its word leads: 'to', seeds of the plugin's lift (a b, bl, b.cond, cbz or tbz into the
+    plugin's .text; a br or blr whose register the words before it make a constant, recomp/patches.py
+    region_targets; the pointer a `ldr xT, [xN, #off]` reads from the plugin page an adrp xN put there, as the record
+    holds it), and 'back', main offsets the lift makes function starts (`entry` lines): the main targets of those
+    branches, and the main addresses the init stored in the plugin's data that lie just after a run of new code, the
+    way back of a hook that runs the moved words itself (SageWheel keeps the site + 12 of each of its far jumps in its
+    .bss). Refused: a branch out of main's and the plugin's .text or into an inline-hook stub (its lift returns at the
+    stub's branch to its trampoline), an svc outside REACH_SVCS, and a literal load from words the init wrote (main
+    keeps the game's own bytes at play, runtime/plugin_init.c restore_page)."""
+    runs = code_runs(hooks)
+    if not runs:
+        return []
+    mods = {m['name']: m for m in rec['modules']}
+    main = mods['main']
+    plugins = [m for m in rec['modules'] if m['plugin'] and m['name'] in rec['images']]
+    stubs = {mods[h['stub'].split('+')[0]]['base'] + int(h['stub'].split('+')[1], 16) for h in hooks
+             if h['kind'] == 'inline' and h.get('stub')}
+    by_off = {int(h['site'].split('+')[1], 16): h for h in hooks if h['kind'] == 'code'}
+    reasons = []
+
+    def text_of(a):
+        if main['base'] <= a < main['base'] + main['text_end']:
+            return main
+        return next((p for p in plugins if p['base'] <= a < p['base'] + p['text_end']), None)
+
+    def lead(o, t):
+        h, where = by_off[o], f'main+{o:#x}'
+        m = text_of(t)
+        if m is None or t % 4:
+            reasons.append(f"{where}: the new code branches to {t:#x}, outside main's and the plugin's code")
+        elif t in stubs:
+            reasons.append(f'{where}: the new code branches into the inline-hook stub {m["name"]}+{t - m["base"]:#x}')
+        elif m is main:
+            h.setdefault('back', []).append(t - main['base'])
+        else:
+            h.setdefault('to', []).append(f'{m["name"]}+{t - m["base"]:#x}')
+
+    for run in runs:
+        for a, (_, t) in patches.region_targets({main['base'] + o: w for o, w in run}).items():
+            lead(a - main['base'], t)
+        pages = {}   # register: the plugin page an adrp just before put there
+        for o, w in run:
+            a, where = main['base'] + o, f'main+{o:#x}'
+            if w & 0xFFE0001F == 0xD4000001 and w >> 5 & 0xFFFF not in REACH_SVCS:
+                reasons.append(f'{where}: the new code has svc {w >> 5 & 0xFFFF:#x}')
+            if w & 0x3B000000 == 0x18000000:   # ldr (literal), the bytes it loads by its size
+                lit = a + sext(w >> 5 & 0x7FFFF, 19) * 4 - main['base']
+                size = (4, 8, 16, 4)[w >> 30] if w >> 26 & 1 else (4, 8, 4, 0)[w >> 30]
+                if any(lit < x + 4 and x < lit + size for x in by_off):
+                    reasons.append(f'{where}: the new code loads a literal from words the init wrote, which main '
+                                   f'does not keep at play')
+            if w & 0x9F000000 == 0x90000000:   # adrp
+                pages[w & 31] = (a & ~0xFFF) + (sext((w >> 5 & 0x7FFFF) << 2 | w >> 29 & 3, 21) << 12)
+                continue
+            if w & 0xFFC00000 == 0xF9400000 and w >> 5 & 31 in pages:   # ldr xT, [xN, #imm]
+                slot = pages[w >> 5 & 31] + (w >> 10 & 0xFFF) * 8
+                p = next((p for p in plugins if p['base'] <= slot <= p['base'] + len(rec['images'][p['name']]) - 8),
+                         None)
+                if p is not None:
+                    t = struct.unpack_from('<Q', rec['images'][p['name']], slot - p['base'])[0]
+                    if text_of(t) is p and t % 4 == 0 and t not in stubs:
+                        by_off[o].setdefault('to', []).append(f'{p["name"]}+{t - p["base"]:#x}')
+            pages.pop(w & 31, None)
+        start, end = run[0][0], run[-1][0] + 4
+        for p in plugins:
+            for v in plugin_pointers(rec, p):
+                o = v - main['base']
+                if start < o <= end + BACK_WINDOW and o % 4 == 0 and o < main['text_end']:
+                    by_off[start].setdefault('back', []).append(o)
+    for h in by_off.values():
+        for k in ('to', 'back'):
+            if k in h:
+                h[k] = sorted(set(h[k]))
+    return reasons
 
 
 # ---- the code the hooks reach
 def plt_imports(nso, img, base, text_end):
     """{absolute address of a PLT stub: the import its GOT slot binds} (adrp x16; ldr x17, [x16, #slot]; add x16, x16,
-    #slot; br x17), from the JUMP_SLOT relocations."""
-    slots = {off: nso.syms[sym][0] for off, typ, sym, _ in nso.relocs if typ == R_AARCH64_JUMP_SLOT}
+    #slot; br x17), from the JUMP_SLOT relocations. A slot whose symbol the plugin defines itself binds to that
+    definition (runtime/loader.c resolve), so its stub maps to the absolute address of the plugin's own code instead of
+    a name: a plugin built with default visibility calls its own exported functions through its PLT (the
+    std::vector<const char*> constructor of Challenge Mode's Enemy Health Regeneration)."""
+    slots = {}
+    for off, typ, sym, _ in nso.relocs:
+        if typ == R_AARCH64_JUMP_SLOT:
+            name, _, shndx, value, _ = nso.syms[sym]
+            slots[off] = base + value if shndx else name
     out = {}
     for o in range(0, text_end - 16, 4):
         w0, w1, _, w3 = struct.unpack_from('<4I', img, o)
@@ -499,6 +645,10 @@ def reach(img, base, text_end, roots, plt, stubs=()):
             if a in seen:
                 break
             if a in plt:
+                if isinstance(plt[a], int):   # the plugin's own function behind its PLT: the path goes on there
+                    seen.add(a)
+                    a = plt[a]
+                    continue
                 imports[plt[a]] = imports.get(plt[a], 0) + 1
                 break
             if not base <= a < base + text_end:
@@ -542,9 +692,9 @@ def reach_check(rec, hooks, impls, game=frozenset()):
         img, base = rec['images'][p['name']], p['base']
         roots, stubs = set(), set()
         for h in hooks:
-            for k in ('stub', 'callback', 'target'):
-                if h.get(k, '').startswith(p['name'] + '+'):
-                    roots.add(base + int(h[k].split('+')[1], 16))
+            for ref in [h.get(k, '') for k in ('stub', 'callback', 'target')] + h.get('to', []):
+                if ref.startswith(p['name'] + '+'):
+                    roots.add(base + int(ref.split('+')[1], 16))
             if h['kind'] == 'inline' and h['stub'].startswith(p['name'] + '+'):
                 stubs.add(base + int(h['stub'].split('+')[1], 16))
         roots |= {a for a in impls if base <= a < base + p['text_end']}
@@ -583,7 +733,12 @@ def init_code(rec, hooks, module):
     trampolines of its far hooks (the moved original words and a branch back). The plugin may point a veneer at any of
     them at play (Zonai Fieldworks turns its features' hooks on and off), so each is a root of the reach check and a
     seed of the lift. The trampolines of inline hooks (never run) and the Orig trampolines of replace hooks (the lift
-    serves them with the function's unpatched copy) are left out: their way back would split main's functions."""
+    serves them with the function's unpatched copy) are left out: their way back would split main's functions.
+
+    An exlaunch inline-hook stub the init writes (stur x30; bl impl; ldur x30; b trampoline; .quad callback) may be the
+    target of a hook the plugin turns on at play: Zonai Fieldworks writes one per member hook at init, back to back,
+    and a member switched on points its gate's pointer at it (the 4th of a row is plugin+0x135048 on 1.4.3). Each stub
+    and its callback are starts; the .quad is data, not code running on into the next stub."""
     p = {m['name']: m for m in rec['modules']}[module]
     img, pre = rec['images'].get(module), rec.get('pre_images', {}).get(module)
     if img is None or pre is None:
@@ -592,14 +747,51 @@ def init_code(rec, hooks, module):
     now, old = struct.unpack_from(f'<{n}I', img), struct.unpack_from(f'<{n}I', pre)
     known = {p['base'] + int(h['trampoline'].split('+')[1], 16) for h in hooks
              if (h.get('trampoline') or '').startswith(module + '+')}
-    out, inside = set(), False   # inside: the word before is a written word that goes on to this one
-    for i in range(n):
+    text = range(p['base'], p['base'] + p['text_end'])
+    out, inside, i = set(), False, 0   # inside: the word before is a written word that goes on to this one
+    while i < n:
         new = old[i] == 0 and now[i] != 0
+        if (new and i + 5 < n and now[i] == STUR_X30 and now[i + 1] & 0xFC000000 == 0x94000000
+                and now[i + 2] == LDUR_X30 and now[i + 3] & 0xFC000000 == 0x14000000):
+            stub = p['base'] + 4 * i
+            callback = now[i + 4] | now[i + 5] << 32
+            out.add(stub)
+            if callback in text:
+                out.add(callback)
+            inside, i = False, i + 6
+            continue
         if new and not inside:
             out.add(p['base'] + 4 * i)
         # b, br, ret end a trampoline; one may follow right after
         inside = new and now[i] & 0xFC000000 != 0x14000000 and now[i] & 0xFFFFFC1F not in (0xD61F0000, 0xD65F0000)
+        i += 1
     return out - known
+
+
+def yield_spins(img, text_end):
+    """{loop head offset: [back-edge offsets]} of the plugin's spin waits: a direct branch back at most SPIN_WIN bytes
+    to a head whose loop body holds a `yield` and no call or SVC; the yield is the hint code puts in a loop that waits
+    for another thread (an exclusive
+    byte lock in Zonai Fieldworks' hook wrappers, plugin+0xe3ff4 on 1.4.3). On the Switch the lock holder runs on its own
+    core; here both hold one of the three virtual cores (runtime/kernel.c), and a holder preempted for the spinner
+    waits for that core while the spinner, which makes no SVC, keeps it: the game froze when Zonai Fieldworks turned a
+    member off. A `spin` line sends each back-edge through rt_spin_gate, which hands the core to a waiting thread
+    (tools/spin_waits.py finds the game's own waits; the installer has no disassembler, so this test is by word)."""
+    n = text_end // 4
+    words = struct.unpack_from(f'<{n}I', img)
+    out = {}
+    for j, w in enumerate(words):
+        pr = pc_relative(w, 4 * j)
+        if pr is None or pr[0][0] not in ('b', 'b.cond', 'cbz', 'tbz') or w & 0xFC000000 == 0x94000000:
+            continue
+        head = pr[1]
+        if not 4 * j - SPIN_WIN <= head <= 4 * j or head % 4:
+            continue
+        body = words[head // 4:j]
+        if YIELD in body and not any(x & 0x7C000000 == 0x14000000 and x >> 31 or x & 0xFFFFFC1F == 0xD63F0000
+                                     or x & 0xFFE0001F == 0xD4000001 for x in body):   # bl, blr, svc: a call
+            out.setdefault(head, []).append(4 * j)
+    return out
 
 
 def entries(rec, hooks, module):
@@ -610,11 +802,14 @@ def entries(rec, hooks, module):
     back there too."""
     mods = {m['name']: m for m in rec['modules']}
     main, p = mods['main'], mods[module]
+    hooks = [h for h in hooks if not header_site(h)]   # never run: no way back into main, no code to seed
     out = {int(h['site'].split('+')[1], 16) + 4 for h in hooks
            if h['kind'] == 'branch' or h['kind'] == 'replace' and not h.get('trampoline')}
+    out |= {o for h in hooks for o in h.get('back', ())}   # where a `code` hook's new words lead in main (code_flow)
     base, img = p['base'], rec['images'][module]
     roots = {base + int(h['target'].split('+')[1], 16) for h in hooks
              if h['kind'] in ('branch', 'call', 'data', 'replace') and h.get('target', '').startswith(module + '+')}
+    roots |= {base + int(t.split('+')[1], 16) for h in hooks for t in h.get('to', ()) if t.startswith(module + '+')}
     tramps = init_code(rec, hooks, module)
     roots |= tramps
     nso = Nso(p['file']) if p.get('file') and Path(p['file']).is_file() else None
@@ -626,7 +821,8 @@ def entries(rec, hooks, module):
 
 def plugin_lines(rec, hooks, name, record_dir, module):
     """The patch lines of the accepted plugin module (recomp/patches.py) for set name: the plugin line, the expected
-    writes (the words at its hooks' sites), the stubs, the seeds, the orig lines and the hook sites."""
+    writes (the words at its hooks' sites), the hook sites and code words, the orig lines, the stubs, the seeds and
+    the entries."""
     lines = []
     mods = {m['name']: m for m in rec['modules']}
     p = mods[module]
@@ -656,6 +852,8 @@ def plugin_lines(rec, hooks, name, record_dir, module):
 
     for h in hooks:
         site = int(h['site'].split('+')[1], 16)
+        if header_site(h):
+            continue
         if h['kind'] == 'inline':
             sm, so = at(h['stub'])
             stubs.setdefault(sm, set()).add(so)
@@ -669,6 +867,13 @@ def plugin_lines(rec, hooks, name, record_dir, module):
         elif h['kind'] == 'data':
             if h.get('target', '').startswith(module + '+'):
                 seeds.setdefault(module, set()).add(at(h['target'])[1])
+        elif h['kind'] == 'code':
+            # new code in main, lifted in a copy of its function (recomp/patches.py `code`); its plugin targets are
+            # seeds and its main targets entries (entries())
+            lines.append(f'code {name} main {site:x} {u(h["original"]):08x} {u(h["new"]):08x}')
+            for t in h.get('to', ()):
+                tm, to = at(t)
+                seeds.setdefault(tm, set()).add(to)
         else:
             tm, to = at(h['target'])
             seeds.setdefault(tm, set()).add(to)
@@ -686,6 +891,8 @@ def plugin_lines(rec, hooks, name, record_dir, module):
         lines.append(f'seed {m} ' + ' '.join(f'{o:x}' for o in sorted(seeds[m])))
     if back:
         lines.append('entry main ' + ' '.join(f'{o:x}' for o in back))
+    for head, edges in sorted(yield_spins(img, p['text_end']).items()):
+        lines.append(f'spin {module} {head:x} ' + ' '.join(f'{b:x}' for b in edges) + '   # a loop with a yield')
     return lines
 
 
@@ -839,9 +1046,16 @@ def report(rec, label, game=frozenset()):
         elif h['kind'] == 'data':
             print(f'  data {h["site"]} {h["original"]} -> {h["new"]}' +
                   (f' (points at {h["target"]})' if h.get('target') else ''))
+        elif h['kind'] == 'code':
+            print(f'  code {h["site"]} {h["original"]} -> {h["new"]}' +
+                  (f', to {", ".join(h["to"])}' if h.get('to') else '') +
+                  (f', back to {", ".join(f"main+{o:#x}" for o in h["back"])}' if h.get('back') else ''))
         else:
             print(f'  {h["kind"]} {h["site"]} (was {h["original"]}) -> {"bl" if h["kind"] == "call" else "b"} '
                   f'{h["target"]}' + (f', Orig trampoline {h["trampoline"]}' if h.get('trampoline') else ''))
+        if header_site(h):
+            print(f'  note: {h["site"]} is main\'s module header, not code: the plugin has no address for this game '
+                  f'update there, and this hook does nothing, as on the Switch')
     for r in reasons:
         print(f'  REFUSED: {r}')
     if not reasons:

@@ -169,6 +169,29 @@ def record(original=0x94000010, trampoline_first=None, stub=None, writes=None, *
 IMPLS = {PLUGIN + IMPL_OFF: 'exl_inline_hook_impl'}
 
 
+def far_jump(site, target, reg=17):
+    """adrp x<reg>, target; add x<reg>, x<reg>, #lo; br x<reg> at main+site (SageWheel's hook)."""
+    a = MAIN + site
+    imm = ((target & ~0xFFF) - (a & ~0xFFF)) >> 12
+    return [0x90000000 | reg | (imm & 3) << 29 | (imm >> 2 & 0x7FFFF) << 5,
+            0x91000000 | reg | reg << 5 | (target & 0xFFF) << 10, 0xD61F0000 | reg << 5]
+
+
+def far_record(target=PLUGIN + THUNK_OFF, back=None):
+    """Three words over a function's prologue that jump into the plugin; back: a main address the init stored in
+    the plugin's .bss, its way back."""
+    words = far_jump(SITE_OFF, target)
+    old = [0xD10243FF, 0xA9037BFD, 0xA9046FFC]
+    rec = record(writes=[{'module': 'main', 'offset': SITE_OFF + 4 * i, 'old': o, 'new': n, 'fn_start': i == 0}
+                         for i, (o, n) in enumerate(zip(old, words))])
+    if back is not None:
+        img = bytearray(rec['images']['plugin0'])
+        rec['pre_images'] = {'plugin0': bytes(img)}
+        struct.pack_into('<Q', img, 0x12000, back)
+        rec['images']['plugin0'] = bytes(img)
+    return rec
+
+
 class Check(unittest.TestCase):
     def reasons(self, rec):
         return xp.check_record(rec, IMPLS)[1]
@@ -278,13 +301,78 @@ class Check(unittest.TestCase):
         w = [{'module': 'sdk', 'offset': 0x100, 'old': 0, 'new': 1}]
         self.refused(record(writes=w), 'a write outside main: sdk+0x100')
 
-    def test_not_a_branch(self):
-        w = [{'module': 'main', 'offset': SITE_OFF, 'old': 0x94000010, 'new': 0xD503201F}]
-        self.refused(record(writes=w), 'is no b')
+    def code(self, rec):
+        """The hooks of an accepted record, which must all be new code (recomp/patches.py `code`)."""
+        hooks, reasons = xp.check_record(rec, IMPLS)
+        self.assertEqual(reasons, [])
+        self.assertEqual({h['kind'] for h in hooks}, {'code'})
+        return {int(h['site'].split('+')[1], 16): h for h in hooks}
 
-    def test_branch_elsewhere(self):
+    def test_not_a_branch(self):   # a nop over a call: new code, lifted in a copy of its function
+        w = [{'module': 'main', 'offset': SITE_OFF, 'old': 0x94000010, 'new': 0xD503201F}]
+        h = self.code(record(writes=w))[SITE_OFF]
+        self.assertEqual((h['new'], h.get('to'), h.get('back')), ('0xd503201f', None, None))
+
+    def test_branch_elsewhere(self):   # a b to elsewhere in main: its target becomes a function start
         w = [{'module': 'main', 'offset': SITE_OFF, 'old': 0x94000010, 'new': b(MAIN + SITE_OFF, MAIN + 0x8000)}]
-        self.refused(record(writes=w), "does not reach into a plugin's .text")
+        self.assertEqual(self.code(record(writes=w))[SITE_OFF]['back'], [0x8000])
+
+    def test_far_jump(self):   # SageWheel: adrp x17; add x17; br x17 into the plugin, back through its .bss
+        hooks = self.code(far_record(back=MAIN + SITE_OFF + 12))
+        self.assertEqual(hooks[SITE_OFF + 8]['to'], [f'plugin0+{THUNK_OFF:#x}'])
+        self.assertEqual(hooks[SITE_OFF]['back'], [SITE_OFF + 12])
+        rec = far_record(back=MAIN + SITE_OFF + 12)
+        hooks, _ = xp.check_record(rec, IMPLS)
+        back, ahead = xp.entries(rec, hooks, 'plugin0')
+        self.assertEqual(back, [SITE_OFF + 12])
+        self.assertEqual(xp.reach_check(rec, hooks, IMPLS)[0], [])
+        far = far_record(back=MAIN + SITE_OFF + 12 + xp.BACK_WINDOW + 4)   # too far after the run: not its way back
+        self.assertNotIn('back', self.code(far)[SITE_OFF])
+
+    def test_far_jump_out_of_the_code(self):
+        self.refused(far_record(target=0x7006000000), "outside main's and the plugin's code")
+        self.refused(far_record(target=PLUGIN + 0x12000), "outside main's and the plugin's code")   # its .data
+
+    def test_far_jump_into_a_stub(self):   # a stub's lift returns at its b to the trampoline
+        rec = far_record(target=PLUGIN + STUB_OFF)
+        rec['writes'].append({'module': 'main', 'offset': 0x2000, 'old': 0xAA0003F3, 'new': b(MAIN + 0x2000,
+                                                                                           PLUGIN + STUB_OFF)})
+        self.refused(rec, 'into the inline-hook stub plugin0+0x4000')
+
+    def test_slot_load_seeds_its_target(self):   # adrp x16, page; ldr x16, [x16, #8]; br x16 through the plugin's data
+        site, slot = MAIN + SITE_OFF, PLUGIN + 0xd008
+        imm = ((slot & ~0xFFF) - (site & ~0xFFF)) >> 12
+        words = [0x90000010 | (imm & 3) << 29 | (imm >> 2 & 0x7FFFF) << 5, 0xF9400210 | 1 << 10, 0xD61F0200]
+        rec = record(writes=[{'module': 'main', 'offset': SITE_OFF + 4 * i, 'old': 0xAA0003F3, 'new': n}
+                             for i, n in enumerate(words)])
+        img = bytearray(rec['images']['plugin0'])
+        struct.pack_into('<Q', img, 0xd008, PLUGIN + CB_OFF)
+        rec['images']['plugin0'] = bytes(img)
+        self.assertEqual(self.code(rec)[SITE_OFF + 4]['to'], [f'plugin0+{CB_OFF:#x}'])
+
+    def test_code_svc(self):
+        w = [{'module': 'main', 'offset': SITE_OFF, 'old': 0xAA0003F3, 'new': 0xD4000801}]   # svc #0x40
+        self.refused(record(writes=w), 'the new code has svc 0x40')
+
+    def test_code_literal_from_written_words(self):   # main keeps the game's bytes at play
+        w = [{'module': 'main', 'offset': SITE_OFF, 'old': 0xAA0003F3, 'new': 0x58000051},   # ldr x17, #8
+             {'module': 'main', 'offset': SITE_OFF + 4, 'old': 0xAA0003F3, 'new': 0xD61F0220},
+             {'module': 'main', 'offset': SITE_OFF + 8, 'old': 0xAA0003F3, 'new': 0x1234}]
+        self.refused(record(writes=w), 'loads a literal from words the init wrote')
+        w[2]['offset'] = SITE_OFF + 16   # the literal at +8..+15 is the game's own again: no reason
+        self.assertEqual(self.reasons(record(writes=w)), [])
+
+    def test_region_targets(self):
+        # movz x17, #0x1234; movk x17, #0x5678, lsl #16; blr x17; then a label resets what is known
+        words = {0x1000: 0xD2824691, 0x1004: 0xF2AACF11, 0x1008: 0xD63F0220}
+        self.assertEqual(patches.region_targets(words), {0x1008: ('blr', 0x56781234)})
+        self.assertEqual(patches.region_targets(words, {0x1004}), {})
+        words[0x1004] = 0xAA0103F1   # mov x17, x1: unknown
+        self.assertEqual(patches.region_targets(words), {})
+        far = dict(zip(range(MAIN + 0x100, MAIN + 0x10c, 4), far_jump(0x100, PLUGIN + 0x3f04)))
+        self.assertEqual(patches.region_targets(far), {MAIN + 0x108: ('br', PLUGIN + 0x3f04)})
+        self.assertEqual(patches.region_targets({0x2000: b(0x2000, 0x2400, True), 0x2004: 0x54000040}),
+                         {0x2000: ('bl', 0x2400), 0x2004: ('bcond', 0x200c)})
 
     def test_stub_shape(self):   # not exlaunch's stub: plugin code the site branches to, a far hook
         stub_at = PLUGIN + STUB_OFF
@@ -319,9 +407,10 @@ class Check(unittest.TestCase):
         rec['images']['plugin0'] = bytes(img)
         self.refused(rec, 'no b to the site + 4')
 
-    def test_indirect_original(self):
-        self.refused(record(original=0xD65F03C0), 'is a br or ret')
-        self.refused(record(original=0xD61F0100), 'is a br or ret')
+    def test_indirect_original(self):   # a b over a ret or br: the copy of the function ends there instead
+        for original in (0xD65F03C0, 0xD61F0100):
+            w = [{'module': 'main', 'offset': SITE_OFF, 'old': original, 'new': b(MAIN + SITE_OFF, PLUGIN + THUNK_OFF)}]
+            self.assertEqual(self.code(record(writes=w))[SITE_OFF]['to'], [f'plugin0+{THUNK_OFF:#x}'])
 
     def test_blr_original(self):   # Zonai Fieldworks hooks blr x8 sites: the call returns, the site goes on
         self.assertEqual(self.reasons(record(original=0xD63F0100)), [])
@@ -452,6 +541,26 @@ class Reach(unittest.TestCase):
         svcs, imports, _, _, _ = xp.reach(img, self.BASE, 0x200, [self.BASE], {self.BASE + 0x80: 'malloc'})
         self.assertEqual((svcs, imports), (set(), {'malloc': 1}))
 
+    def test_own_function_through_plt_is_followed(self):
+        # bl plt; ret.  The PLT stub at 0x80 binds to the plugin's own function at 0x100: svc 0x40; ret
+        img = bytearray(code([b(self.BASE, self.BASE + 0x80, True), RET_W]))
+        struct.pack_into('<II', img, 0x100, SVC_40, RET_W)
+        svcs, imports, _, _, _ = xp.reach(bytes(img), self.BASE, 0x200, [self.BASE],
+                                          {self.BASE + 0x80: self.BASE + 0x100})
+        self.assertEqual((svcs, imports), ({0x40}, {}))
+
+    def test_plt_slot_of_own_symbol_maps_to_its_code(self):
+        # Two PLT stubs (adrp x16, page 0; ldr x17, [x16, #slot]; add x16, x16, #slot; br x17) over GOT slots 0x180
+        # and 0x188: the first binds an import, the second a symbol the plugin defines at +0x40.
+        def stub(slot):
+            return [0x90000010, 0xF9400211 | (slot // 8) << 10, 0x91000210 | slot << 10, 0xD61F0220]
+        img = code(stub(0x180) + stub(0x188))
+        nso = mock.Mock(relocs=[(0x180, xp.R_AARCH64_JUMP_SLOT, 1, 0), (0x188, xp.R_AARCH64_JUMP_SLOT, 2, 0)],
+                        syms=[('', 0, 0, 0, 0), ('malloc', 0x12, 0, 0, 0),
+                              ('_ZNSt6vectorIPKcSaIS1_EEC1ESt16initializer_listIS1_ERKS2_', 0x22, 7, 0x40, 8)])
+        self.assertEqual(xp.plt_imports(nso, img, self.BASE, 0x200),
+                         {self.BASE: 'malloc', self.BASE + 0x10: self.BASE + 0x40})
+
     def test_stub_returns_at_its_trampoline_branch(self):
         # stur; bl impl; ldur; b trampoline (where an svc sits): the b is the stub's return
         stub = [xp.STUR_X30, b(self.BASE + 4, self.BASE + 0x40, True), xp.LDUR_X30, b(self.BASE + 12, self.BASE + 0x100)]
@@ -525,6 +634,17 @@ class Lines(unittest.TestCase):
             rec['modules'][2]['image'] = 'plugin0.img'
             return xp.plugin_lines(rec, xp.hooks_of(hooks, 'plugin0'), 'mod_x', d, 'plugin0')
 
+    def test_code(self):   # SageWheel's far jump: code lines, the plugin target a seed, the way back an entry
+        rec = far_record(back=MAIN + SITE_OFF + 12)
+        out = self.lines(rec)
+        words = [w['new'] for w in rec['writes']]
+        for i, (old, new) in enumerate(zip((0xD10243FF, 0xA9037BFD, 0xA9046FFC), words)):
+            self.assertIn(f'code mod_x main {SITE_OFF + 4 * i:x} {old:08x} {new:08x}', out)
+            self.assertIn(f'expect mod_x main {SITE_OFF + 4 * i:x} {old:08x} {new:08x}', out)
+        self.assertIn(f'seed plugin0 {THUNK_OFF:x}', out)
+        self.assertIn(f'entry main {SITE_OFF + 12:x}', out)
+        self.assertFalse(any(x.startswith(('site', 'orig', 'stub')) for x in out), out)
+
     def test_image_path_roundtrips_through_the_patch_table(self):
         rec = record()
         mods = [(m['name'], m['base'], m['size']) for m in rec['modules']]
@@ -582,6 +702,47 @@ class Lines(unittest.TestCase):
         self.assertIn(f'site mod_x main {SITE_OFF:x} a9ba7bfd {new:08x}', out)
         self.assertIn(f'orig mod_x plugin0 {TRAMP_OFF:x} main {SITE_OFF:x}', out)
         self.assertIn(f'seed plugin0 {THUNK_OFF:x}', out)
+
+    def test_stubs_written_back_to_back_are_each_a_start(self):
+        # Zonai Fieldworks writes an inline-hook stub per member hook at init, back to back; a member switched on at
+        # play points its gate at one (1.4.3 plugin+0x135048, the 4th). The .quad callback after each stub is data.
+        rec = record()
+        img, row = bytearray(rec['images']['plugin0']), 0x8000
+        for k in range(3):
+            at = row + 0x18 * k
+            struct.pack_into('<4IQ', img, at, xp.STUR_X30, b(PLUGIN + at + 4, PLUGIN + IMPL_OFF, True), xp.LDUR_X30,
+                             b(PLUGIN + at + 12, PLUGIN + TRAMP_OFF), PLUGIN + CB_OFF)
+        rec['images']['plugin0'] = bytes(img)
+        pre = bytearray(img)
+        pre[row:row + 0x48] = bytes(0x48)
+        rec['pre_images'] = {'plugin0': bytes(pre)}
+        starts = xp.init_code(rec, [], 'plugin0')
+        self.assertEqual(starts, {PLUGIN + row, PLUGIN + row + 0x18, PLUGIN + row + 0x30, PLUGIN + CB_OFF})
+
+    def test_yield_loops_are_spin_waits(self):
+        # Zonai Fieldworks' hook wrapper takes a byte lock (plugin+0xe3ff4 on 1.4.3): yield; ldaxrb; stxrb; cbnz; tbnz
+        # back to the yield. A loop with a yield and a call in it, or a back branch with no yield, is no spin wait.
+        ldaxrb, stxrb = 0x085FFC40, 0x08037C41
+        words = [xp.NOP] * 64
+        words[1:6] = [xp.YIELD, ldaxrb, stxrb, 0x35FFFFC3, 0x3707FF80]   # cbnz w3, -8; tbnz w0, #0, -16
+        words[10:14] = [xp.YIELD, 0x94000100, xp.NOP, 0x17FFFFFD]        # yield; bl; nop; b -12
+        words[20:23] = [xp.NOP, xp.NOP, 0x17FFFFFE]                      # b -8
+        img = struct.pack('<64I', *words)
+        self.assertEqual(xp.yield_spins(img, len(img)), {4: [20]})
+
+    def test_hook_on_main_header_keeps_only_its_expect(self):
+        # Challenge Mode's Enemy Health Regeneration on an update its table lacks: a replace hook at main+0x0, whose
+        # word 1 is main's module header. The write is checked at start; the lift gets no site, orig or seed for it.
+        new = b(MAIN, PLUGIN + THUNK_OFF)
+        rec = record(writes=[{'module': 'main', 'offset': 0, 'old': 1, 'new': new}])
+        hook = {'kind': 'replace', 'site': 'main+0x0', 'original': '0x00000001', 'target': f'plugin0+{THUNK_OFF:#x}',
+                'trampoline': f'plugin0+{TRAMP_OFF:#x}'}
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'plugin0.img').write_bytes(rec['images']['plugin0'])
+            rec['modules'][2]['image'] = 'plugin0.img'
+            out = xp.plugin_lines(rec, [hook], 'mod_x', d, 'plugin0')
+        self.assertIn(f'expect mod_x main 0 00000001 {new:08x}', out)
+        self.assertFalse(any(x.startswith(('site', 'orig', 'seed', 'entry')) for x in out), out)
 
     def test_call(self):
         new = b(MAIN + SITE_OFF, PLUGIN + THUNK_OFF, True)
@@ -967,6 +1128,77 @@ class Generator(unittest.TestCase):
         self.assertNotEqual(gen.chunk_key('m', 0, fns, site, [0x100], {}, [], None, None),
                             gen.chunk_key('m', 0, fns, {0x100: [(0, [('call', 0x7005204010), 0xAA0003F3])]}, [0x100],
                                           {}, [], None, None))
+
+    def code_table(self, words, extra=()):
+        """A table with the plugin and `code` lines putting words ({main offset: word}) over main's function."""
+        old = {FN: 0xAA0003F3, FN + 4: 0xAA1303E0, FN + 8: RET_W}
+        text = ['set mod_x TOTK_MODPATCH_X 0 ordered',
+                f'plugin mod_x plugin0 {self.sha} {json.dumps((self.d / "plugin0.img").as_posix())}', 'seed plugin0 4200',
+                *[f'code mod_x main {o:x} {old[o]:08x} {w:08x}' for o, w in words.items()], *extra]
+        (self.d / 'c.txt').write_text('\n'.join(text) + '\n')
+        return patches.load(self.d / 'c.txt', self.mods)
+
+    def emit_code(self, t, starts=()):
+        m = self.bases['main'] + FN
+        mod = gen.open_module('main', self.d / 'exefs/main', self.bases['main'], t)
+        patches.check(t, mod, 'main')
+        e = gen.Emitter(mod, {m, *starts}, t.for_module('main', self.bases['main']),
+                        codes=t.codes_for('main', self.bases['main']), picks=t.picks_for('main', self.bases['main']))
+        return gen.chunk_text('main', 0, e, [(m, m + 12)])
+
+    def test_code_copy_of_a_far_jump(self):
+        # SageWheel: adrp x17; add x17, x17, #lo; br x17 over the function's first three words, into plugin0+0x4200
+        m, target = self.bases['main'] + FN, self.bases['plugin0'] + 0x4200
+        words = dict(zip((FN, FN + 4, FN + 8), far_jump(FN, target)))
+        t = self.code_table(words)
+        c = self.emit_code(t)
+        own, copy = c[c.index(f'void f_{m:x}(Cpu *c) {{'):c.index(f'static void fw0_{m:x}(Cpu *c) {{')], \
+            c[c.index(f'static void fw0_{m:x}(Cpu *c) {{'):]
+        self.assertIn(f'static void fw0_{m:x}(Cpu *c);', c[:c.index(f'void f_{m:x}(Cpu *c) {{')])
+        self.assertIn(f'if (rt_patch_on[0]) {{ __attribute__((musttail)) return fw0_{m:x}(c); }}', own)
+        self.assertIn('return;', own)                                       # the game's own body stays
+        self.assertNotIn('rt_patch_on', copy)
+        # br x17 as a branch to its constant: through the dispatch table, where plugin_trace counts the hook
+        self.assertIn(f'c->pc = {target:#x}ull; __attribute__((musttail)) return rt_dispatch(c);', copy)
+        self.assertNotIn('c->pc = x17', copy)
+
+    def test_code_copy_keeps_other_sets_sites(self):
+        # a cheat on the function's last word stays in the copy; the plugin's nop over the first word is in it
+        t = self.code_table({FN: xp.NOP}, ['set cheat TOTK_CHEAT 0', f'site cheat main {FN + 4:x} aa1303e0 aa1f03e0'])
+        c = self.emit_code(t)
+        copy = c[c.index('static void fw0_'):]
+        self.assertIn('rt_patch_on[1]', copy)
+        self.assertNotIn('x19 = x0', copy.split('rt_patch_on[1]')[0])     # the mov the nop replaced is gone
+
+    def test_code_copy_on_another_mods_site(self):
+        # Zonai Fieldworks hooks the first word of functions SageWheel's far jumps cover: the site is contested (the
+        # Mods tab order picks), in the copy the other mod's b tests the pick and SageWheel's adrp is its original
+        m, pb = self.bases['main'] + FN, self.bases['plugin0']
+        words = dict(zip((FN, FN + 4, FN + 8), far_jump(FN, pb + 0x4200)))
+        other = b(m, pb + 0x4100)
+        t = self.code_table(words, ['set zf TOTK_ZF 0 ordered', f'site zf main {FN:x} aa0003f3 {other:08x}'])
+        self.assertEqual(t.picks(), [('main', FN, [1, 0])])
+        c = self.emit_code(t)
+        copy = c[c.index('static void fw0_'):]
+        self.assertIn('if (rt_patch_pick[0] == 1)', copy)
+        self.assertIn(f'c->pc = {pb + 0x4100:#x}ull;', copy)                 # the other mod's hook when it wins
+        self.assertIn(f'{(pb + 0x4200) & ~0xFFF:#x}ull', copy)               # else SageWheel's adrp
+        self.assertIn('c->pc = x17;', copy)   # its br is not folded: the adrp before it may not have run
+        own = c[c.index(f'void f_{m:x}(Cpu *c) {{'):c.index(f'static void fw0_{m:x}(Cpu *c) {{')]
+        self.assertIn('if (rt_patch_pick[0] == 1)', own)
+
+    def test_code_copy_branch_needs_a_start(self):
+        m = self.bases['main'] + FN
+        t = self.code_table({FN: b(m, m + 0x400)})
+        with self.assertRaises(patches.PatchError):
+            self.emit_code(t)
+        self.assertIn(f'__attribute__((musttail)) return f_{m + 0x400:x}(c);', self.emit_code(t, {m + 0x400}))
+
+    def test_code_line_checks_the_original(self):
+        t = self.code_table({FN: xp.NOP})
+        t.codes['main'][FN] = [(0, xp.NOP, 0x12345678)]
+        with self.assertRaises(patches.PatchError):
+            patches.check(t, gen.open_module('main', self.d / 'exefs/main', self.bases['main'], t), 'main')
 
     def test_no_plugin_lines_no_plugin_header(self):
         (self.d / 'q.txt').write_text('set fps60 TOTK_FPS60 0\n')
